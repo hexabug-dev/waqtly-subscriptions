@@ -1,0 +1,27 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "cfa6249b93adcd8462081b7d8400d5f2"
+name = "Waqtly Subscriptions"
+application_url = "http://localhost:3333"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-07"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_checkout_and_accounts_configurations,write_checkout_and_accounts_configurations,read_customers,write_customers,read_fulfillments,read_orders,write_orders,write_payment_mandate,read_payment_mandate,read_products,write_products,read_purchase_options,write_purchase_options,read_shopify_payments_provider_accounts_sensitive,write_own_subscription_contracts,read_own_subscription_contracts,customer_read_customers,customer_read_draft_orders,customer_read_orders,customer_write_own_subscription_contracts,customer_read_own_subscription_contracts"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "http://localhost:3333/auth/callback",
+  "http://localhost:3333/auth/shopify/callback"
+]
+
+[pos]
+embedded = false
