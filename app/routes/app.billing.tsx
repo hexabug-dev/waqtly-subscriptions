@@ -1,6 +1,6 @@
 import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
+import { useFetcher, useLoaderData } from "@remix-run/react";
 import { Page, Card, Text, Badge, Button, BlockStack, Banner } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -105,9 +105,9 @@ const tdStyle = { padding: "12px 16px", fontSize: "13px", color: "#202223", vert
 
 export default function BillingPage() {
   const { rows, now } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
-  const isRunning = navigation.state === "submitting";
+  const fetcher = useFetcher<typeof action>();
+  const actionData = fetcher.data;
+  const isRunning = fetcher.state === "submitting";
 
   const due = rows.filter((r) => r.billingState === "due").length;
   const freePeriod = rows.filter((r) => r.billingState === "in-free-period").length;
@@ -151,11 +151,14 @@ export default function BillingPage() {
               Triggers the billing scheduler now. Only contracts that are due AND past their 6-month free period will be charged.
               Checked at: {new Date(now).toLocaleString()}
             </Text>
-            <Form method="post">
-              <Button submit loading={isRunning} variant="primary" tone="critical">
-                {isRunning ? "Running…" : "Run Billing Scheduler"}
-              </Button>
-            </Form>
+            <Button
+              onClick={() => fetcher.submit({}, { method: "post" })}
+              loading={isRunning}
+              variant="primary"
+              tone="critical"
+            >
+              {isRunning ? "Running…" : "Run Billing Scheduler"}
+            </Button>
           </BlockStack>
         </Card>
 
