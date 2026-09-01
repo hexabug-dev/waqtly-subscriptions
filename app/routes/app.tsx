@@ -18,6 +18,7 @@ export default function App() {
         <a href="/app" rel="home">Home</a>
         <a href="/app/selling-plans">Selling Plans</a>
         <a href="/app/contracts">Contracts</a>
+        <a href="/app/webhooks">Webhooks</a>
       </NavMenu>
       <Outlet />
     </AppProvider>
