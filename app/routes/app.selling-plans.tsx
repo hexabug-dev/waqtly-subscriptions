@@ -89,16 +89,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Re-create under this app's OAuth token
+    // Step 1: create the group (sellingPlans removed from SellingPlanGroupInput in 2025-10)
+    // Step 2: add selling plans via sellingPlanGroupAddSellingPlans
     for (const plan of PLAN_CONFIG) {
       try {
-        const createRes = await admin.graphql(
+        // --- Step 1: create the group shell ---
+        const groupRes = await admin.graphql(
           `mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
             sellingPlanGroupCreate(input: $input, resources: $resources) {
-              sellingPlanGroup {
-                id
-                appId
-                name
-              }
+              sellingPlanGroup { id appId name }
               userErrors { field message }
             }
           }`,
@@ -108,42 +107,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 name: plan.name,
                 merchantCode: plan.merchantCode,
                 options: ["Subscription Plan"],
-                sellingPlans: [
-                  {
-                    name: plan.name,
-                    options: ["Subscription Plan"],
-                    position: 1,
-                    category: "SUBSCRIPTION",
-                    billingPolicy: {
-                      recurring: {
-                        interval: "MONTH",
-                        intervalCount: 1,
-                        minCycles: 1,
-                      },
-                    },
-                    deliveryPolicy: {
-                      recurring: {
-                        interval: "MONTH",
-                        intervalCount: 1,
-                      },
-                    },
-                    pricingPolicies: [
-                      {
-                        fixed: {
-                          adjustmentType: "PRICE",
-                          adjustmentValue: { fixedValue: plan.entryPrice },
-                        },
-                      },
-                      {
-                        recurring: {
-                          afterCycle: 1,
-                          adjustmentType: "PRICE",
-                          adjustmentValue: { fixedValue: plan.recurringPrice },
-                        },
-                      },
-                    ],
-                  },
-                ],
               },
               resources: {
                 productIds: [plan.productId],
@@ -152,31 +115,87 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         );
 
-        const createData = await createRes.json();
+        const groupData = await groupRes.json();
+        const groupResult = groupData.data?.sellingPlanGroupCreate;
 
-        // Surface top-level GraphQL errors (network/auth/schema level)
-        if (createData.errors?.length) {
-          const msg = createData.errors.map((e: { message: string }) => e.message).join("; ");
-          console.error(`[selling-plans] graphql error for ${plan.name}:`, msg);
-          errors.push(`${plan.name}: ${msg}`);
+        if (groupResult?.userErrors?.length) {
+          const msg = groupResult.userErrors.map((e: { message: string }) => e.message).join(", ");
+          console.error(`[selling-plans] group userErrors for ${plan.name}:`, msg);
+          errors.push(`${plan.name} (group): ${msg}`);
           continue;
         }
 
-        const result = createData.data?.sellingPlanGroupCreate;
+        const groupId = groupResult?.sellingPlanGroup?.id;
+        if (!groupId) {
+          console.error(`[selling-plans] no groupId for ${plan.name}:`, JSON.stringify(groupData));
+          errors.push(`${plan.name}: No group ID returned`);
+          continue;
+        }
 
-        if (result?.userErrors?.length) {
-          const msg = result.userErrors.map((e: { message: string }) => e.message).join(", ");
-          console.error(`[selling-plans] userErrors for ${plan.name}:`, msg);
-          errors.push(`${plan.name}: ${msg}`);
-        } else if (result?.sellingPlanGroup) {
-          created.push({
-            name: result.sellingPlanGroup.name,
-            id: result.sellingPlanGroup.id,
-            appId: result.sellingPlanGroup.appId,
-          });
+        // --- Step 2: add selling plans ---
+        const plansRes = await admin.graphql(
+          `mutation addPlans($id: ID!, $sellingPlansToAdd: [SellingPlanInput!]!) {
+            sellingPlanGroupAddSellingPlans(id: $id, sellingPlansToAdd: $sellingPlansToAdd) {
+              sellingPlans { id name }
+              userErrors { field message }
+            }
+          }`,
+          {
+            variables: {
+              id: groupId,
+              sellingPlansToAdd: [
+                {
+                  name: plan.name,
+                  options: ["Subscription Plan"],
+                  position: 1,
+                  category: "SUBSCRIPTION",
+                  billingPolicy: {
+                    recurring: {
+                      interval: "MONTH",
+                      intervalCount: 1,
+                      minCycles: 1,
+                    },
+                  },
+                  deliveryPolicy: {
+                    recurring: {
+                      interval: "MONTH",
+                      intervalCount: 1,
+                    },
+                  },
+                  pricingPolicies: [
+                    {
+                      fixed: {
+                        adjustmentType: "PRICE",
+                        adjustmentValue: { fixedValue: plan.entryPrice },
+                      },
+                    },
+                    {
+                      recurring: {
+                        afterCycle: 1,
+                        adjustmentType: "PRICE",
+                        adjustmentValue: { fixedValue: plan.recurringPrice },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          }
+        );
+
+        const plansData = await plansRes.json();
+        const plansResult = plansData.data?.sellingPlanGroupAddSellingPlans;
+
+        if (plansResult?.userErrors?.length) {
+          const msg = plansResult.userErrors.map((e: { message: string }) => e.message).join(", ");
+          console.error(`[selling-plans] plans userErrors for ${plan.name}:`, msg);
+          errors.push(`${plan.name} (plans): ${msg}`);
         } else {
-          console.error(`[selling-plans] no data returned for ${plan.name}:`, JSON.stringify(createData));
-          errors.push(`${plan.name}: No data returned from Shopify`);
+          created.push({
+            name: groupResult.sellingPlanGroup.name,
+            id: groupId,
+            appId: groupResult.sellingPlanGroup.appId,
+          });
         }
       } catch (err) {
         console.error(`[selling-plans] exception for ${plan.name}:`, err);
