@@ -13,10 +13,7 @@ const SUBSCRIPTIONS_QUERY = `
             createdAt
             nextBillingDate
             originOrder {
-              totalPrice {
-                amount
-                currencyCode
-              }
+              totalPrice { amount currencyCode }
             }
             customerPaymentMethod {
               id
@@ -30,24 +27,18 @@ const SUBSCRIPTIONS_QUERY = `
                 }
               }
             }
-            lines(first: 5) {
+            lines(first: 10) {
               edges {
                 node {
                   id
                   title
                   variantTitle
                   sellingPlanName
-                  currentPrice {
-                    amount
-                    currencyCode
-                  }
+                  currentPrice { amount currencyCode }
                   pricingPolicy {
                     cycleDiscounts {
                       afterCycle
-                      computedPrice {
-                        amount
-                        currencyCode
-                      }
+                      computedPrice { amount currencyCode }
                     }
                   }
                 }
@@ -60,7 +51,7 @@ const SUBSCRIPTIONS_QUERY = `
   }
 `;
 
-// DEV_MOCK: remove before deploy
+// DEV_MOCK: set to false once pause/resume backend is live
 const DEV_MOCK = true;
 const MOCK_CONTRACT = {
   id: 'gid://shopify/SubscriptionContract/26114752835',
@@ -68,7 +59,7 @@ const MOCK_CONTRACT = {
   createdAt: '2026-08-31T10:00:00Z',
   nextBillingDate: '2027-02-28T10:00:00Z',
   originOrder: {
-    totalPrice: { amount: '139.00', currencyCode: 'EUR' },
+    totalPrice: { amount: '238.00', currencyCode: 'EUR' },
   },
   customerPaymentMethod: {
     id: 'gid://shopify/CustomerPaymentMethod/abc123',
@@ -76,25 +67,42 @@ const MOCK_CONTRACT = {
     instrument: { brand: 'visa', lastDigits: '4242', expiryMonth: 12, expiryYear: 2030 },
   },
   lines: {
-    edges: [{
-      node: {
-        id: '1',
-        title: 'Waqtly',
-        variantTitle: null,
-        sellingPlanName: 'Waqtly Plus — Monthly',
-        currentPrice: { amount: '7.99', currencyCode: 'EUR' },
-        pricingPolicy: {
-          cycleDiscounts: [
-            { afterCycle: 0, computedPrice: { amount: '0.00', currencyCode: 'EUR' } },
-            { afterCycle: 6, computedPrice: { amount: '7.99', currencyCode: 'EUR' } },
-          ],
+    edges: [
+      {
+        node: {
+          id: '1',
+          title: 'Waqtly Plus',
+          variantTitle: null,
+          sellingPlanName: 'Waqtly Plus — Monthly',
+          currentPrice: { amount: '7.99', currencyCode: 'EUR' },
+          pricingPolicy: {
+            cycleDiscounts: [
+              { afterCycle: 0, computedPrice: { amount: '0.00', currencyCode: 'EUR' } },
+              { afterCycle: 6, computedPrice: { amount: '7.99', currencyCode: 'EUR' } },
+            ],
+          },
         },
       },
-    }],
+      {
+        node: {
+          id: '2',
+          title: 'Waqtly Nano',
+          variantTitle: null,
+          sellingPlanName: 'Waqtly Nano — Monthly',
+          currentPrice: { amount: '7.99', currencyCode: 'EUR' },
+          pricingPolicy: {
+            cycleDiscounts: [
+              { afterCycle: 0, computedPrice: { amount: '0.00', currencyCode: 'EUR' } },
+              { afterCycle: 6, computedPrice: { amount: '7.99', currencyCode: 'EUR' } },
+            ],
+          },
+        },
+      },
+    ],
   },
 };
 
-function formatMoney(amount, currencyCode) {
+function fmt(amount, currencyCode) {
   try {
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
@@ -104,6 +112,20 @@ function formatMoney(amount, currencyCode) {
   } catch {
     return `${currencyCode || ''}${parseFloat(amount || 0).toFixed(2)}`;
   }
+}
+
+function fmtDate(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('en-IE', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function capitalise(str) {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
 
 export default async () => {
@@ -135,9 +157,7 @@ function SubscriptionPortal() {
     return (
       <s-stack spacing="base">
         <s-heading level="1">My Subscription</s-heading>
-        <s-banner tone="critical">
-          <s-text>{loadError}</s-text>
-        </s-banner>
+        <s-banner tone="critical"><s-text>{loadError}</s-text></s-banner>
       </s-stack>
     );
   }
@@ -151,7 +171,6 @@ function SubscriptionPortal() {
     );
   }
 
-  // Show ACTIVE, PAUSED, and FAILED — not CANCELLED or EXPIRED
   const visible = contracts.filter(
     (c) => c.status !== 'CANCELLED' && c.status !== 'EXPIRED',
   );
@@ -159,16 +178,11 @@ function SubscriptionPortal() {
   return (
     <s-stack spacing="loose">
       <s-heading level="1">My Subscription</s-heading>
-
       {visible.length === 0 ? (
         <s-text>You have no active subscriptions.</s-text>
       ) : (
         visible.map((contract) => (
-          <ContractCard
-            key={contract.id}
-            contract={contract}
-            onRefresh={load}
-          />
+          <ContractCard key={contract.id} contract={contract} onRefresh={load} />
         ))
       )}
     </s-stack>
@@ -180,61 +194,29 @@ function ContractCard({ contract, onRefresh }) {
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
 
-  const line = contract.lines?.edges?.[0]?.node;
-  const planName = line?.sellingPlanName ?? line?.title ?? 'Waqtly';
+  const lines = contract.lines?.edges?.map((e) => e.node) ?? [];
   const pm = contract.customerPaymentMethod;
-  const card = pm?.instrument;
+  const pmCard = pm?.instrument;
   const updateUrl = pm?.instrumentUpdateUrl;
-
-  // Dynamic pricing from contract data
-  const monthlyPrice = line?.currentPrice;
-  const monthlyAmount = monthlyPrice
-    ? formatMoney(monthlyPrice.amount, monthlyPrice.currencyCode)
-    : null;
-
-  // Free months: find the first non-zero paid cycle; its afterCycle = number of free months
-  const discounts = line?.pricingPolicy?.cycleDiscounts ?? [];
-  const firstPaid = discounts.find((d) => parseFloat(d.computedPrice?.amount ?? '0') > 0);
-  const freeMonthsCount = firstPaid?.afterCycle ?? 0;
-
-  // Entry payment from the original order total
-  const originPrice = contract.originOrder?.totalPrice;
-  const entryAmount = originPrice
-    ? formatMoney(originPrice.amount, originPrice.currencyCode)
-    : null;
-
-  const fmt = (iso) =>
-    iso
-      ? new Date(iso).toLocaleDateString('en-IE', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : null;
-
-  const startDate = fmt(contract.createdAt);
-  const nextBillingDate = fmt(contract.nextBillingDate);
 
   const isActive = contract.status === 'ACTIVE';
   const isPaused = contract.status === 'PAUSED';
   const isFailed = contract.status === 'FAILED';
 
-  const STATUS_LABELS = {
-    ACTIVE: 'Active',
-    PAUSED: 'Paused',
-    FAILED: 'Payment failed',
-    CANCELLED: 'Cancelled',
-    EXPIRED: 'Expired',
-  };
-  const STATUS_TONES = {
-    ACTIVE: 'success',
-    PAUSED: 'warning',
-    FAILED: 'critical',
-    CANCELLED: 'info',
-    EXPIRED: 'info',
-  };
-  const statusLabel = STATUS_LABELS[contract.status] ?? contract.status;
-  const statusTone = STATUS_TONES[contract.status] ?? 'info';
+  const STATUS_LABELS = { ACTIVE: 'Active', PAUSED: 'Paused', FAILED: 'Payment failed' };
+  const STATUS_TONES = { ACTIVE: 'success', PAUSED: 'warning', FAILED: 'critical' };
+
+  // Entry payment from original order
+  const originPrice = contract.originOrder?.totalPrice;
+  const entryAmount = originPrice ? fmt(originPrice.amount, originPrice.currencyCode) : null;
+  const startDate = fmtDate(contract.createdAt);
+  const nextDate = fmtDate(contract.nextBillingDate);
+
+  // Free months — derived from first line's pricing policy
+  const firstLine = lines[0];
+  const discounts = firstLine?.pricingPolicy?.cycleDiscounts ?? [];
+  const firstPaid = discounts.find((d) => parseFloat(d.computedPrice?.amount ?? '0') > 0);
+  const freeMonths = firstPaid?.afterCycle ?? 0;
 
   async function confirmPause() {
     setLoading(true);
@@ -277,111 +259,120 @@ function ContractCard({ contract, onRefresh }) {
     <s-box background="base" padding="base" border="base base">
       <s-stack spacing="base">
 
-        {/* Plan header */}
-        <s-stack direction="inline" spacing="tight" alignItems="center">
-          <s-text emphasis="bold">{planName}</s-text>
-          <s-badge tone={statusTone}>{statusLabel}</s-badge>
-        </s-stack>
-
-        {/* Status banners */}
+        {/* ── Status banners ── */}
         {isPaused && (
           <s-banner tone="warning">
-            <s-text>
-              Your subscription is paused. Waqtly features on your tablet are currently restricted. Resume at any time to restore access.
-            </s-text>
+            <s-text>Your subscription is paused. Waqtly features on your tablet are restricted until you resume.</s-text>
+          </s-banner>
+        )}
+        {isFailed && (
+          <s-banner tone="critical">
+            <s-text>Your last payment failed. Update your payment method to restore full access.</s-text>
           </s-banner>
         )}
 
-        {isFailed && (
-          <s-banner tone="critical">
-            <s-text>
-              Your last payment failed. Update your payment method to restore full access.
-            </s-text>
-          </s-banner>
-        )}
+        {/* ── Devices ── */}
+        <s-heading level="3">Devices</s-heading>
+        <s-stack spacing="tight">
+          {lines.map((line) => (
+            <s-stack key={line.id} direction="inline" spacing="tight" alignItems="center">
+              <s-text emphasis="bold">{line.title}</s-text>
+              <s-text size="small" tone="subdued">{line.sellingPlanName ?? ''}</s-text>
+              <s-badge tone={STATUS_TONES[contract.status] ?? 'info'}>
+                {STATUS_LABELS[contract.status] ?? contract.status}
+              </s-badge>
+            </s-stack>
+          ))}
+        </s-stack>
 
         <s-divider />
 
-        {/* Billing timeline */}
+        {/* ── Billing timeline ── */}
         <s-heading level="3">Billing timeline</s-heading>
         <s-stack spacing="tight">
+
           {entryAmount && (
-            <BillingRow
-              label={startDate ? `Entry payment · ${startDate}` : 'Entry payment'}
-              amount={entryAmount}
-              status="paid"
-            />
+            <s-stack direction="inline" spacing="tight" alignItems="center">
+              <s-text size="small">
+                Entry payment{startDate ? ` · ${startDate}` : ''}
+              </s-text>
+              <s-text size="small" emphasis="bold">{entryAmount}</s-text>
+              <s-badge tone="success">Paid</s-badge>
+            </s-stack>
           )}
-          {freeMonthsCount > 0 && (
-            <BillingRow
-              label={`Months 1–${freeMonthsCount}`}
-              amount="No charge"
-              status="free"
-            />
+
+          {freeMonths > 0 && (
+            <s-stack direction="inline" spacing="tight" alignItems="center">
+              <s-text size="small">Months 1–{freeMonths} · No charge</s-text>
+              <s-badge tone="info">Free period</s-badge>
+            </s-stack>
           )}
-          {monthlyAmount && (
-            <BillingRow
-              label={
-                nextBillingDate
-                  ? `From ${nextBillingDate}`
-                  : freeMonthsCount > 0
-                  ? `Month ${freeMonthsCount + 1} onwards`
-                  : 'Recurring'
-              }
-              amount={`${monthlyAmount} / month`}
-              status={isPaused ? 'paused' : 'upcoming'}
-            />
-          )}
+
+          {lines.map((line) => {
+            const monthly = line.currentPrice;
+            if (!monthly) return null;
+            const monthlyStr = fmt(monthly.amount, monthly.currencyCode);
+            const label = nextDate
+              ? `From ${nextDate}`
+              : freeMonths > 0
+              ? `Month ${freeMonths + 1} onwards`
+              : 'Recurring';
+            return (
+              <s-stack key={line.id} direction="inline" spacing="tight" alignItems="center">
+                <s-text size="small">
+                  {line.title} · {label}
+                </s-text>
+                <s-text size="small" emphasis="bold">{monthlyStr} / month</s-text>
+                <s-badge tone={isPaused ? 'warning' : 'info'}>
+                  {isPaused ? 'Paused' : 'Upcoming'}
+                </s-badge>
+              </s-stack>
+            );
+          })}
+
         </s-stack>
 
-        {/* Payment method */}
-        {card && (
+        {/* ── Payment method ── */}
+        {pmCard && (
           <>
             <s-divider />
             <s-heading level="3">Payment method</s-heading>
-            <s-text>
-              {capitalise(card.brand ?? 'Card')} ending {card.lastDigits}
-              {card.expiryMonth && card.expiryYear
-                ? ` · Expires ${card.expiryMonth}/${String(card.expiryYear).slice(-2)}`
-                : ''}
-            </s-text>
+            <s-stack direction="inline" spacing="tight" alignItems="center">
+              <s-text>
+                {capitalise(pmCard.brand ?? 'Card')} ending {pmCard.lastDigits}
+                {pmCard.expiryMonth && pmCard.expiryYear
+                  ? ` · Expires ${pmCard.expiryMonth}/${String(pmCard.expiryYear).slice(-2)}`
+                  : ''}
+              </s-text>
+              {updateUrl && (
+                <s-button variant="secondary" href={updateUrl} size="slim">Update</s-button>
+              )}
+            </s-stack>
           </>
         )}
 
-        {/* Per-card error */}
+        {/* ── Action error ── */}
         {actionError && (
-          <s-banner tone="critical">
-            <s-text>{actionError}</s-text>
-          </s-banner>
+          <s-banner tone="critical"><s-text>{actionError}</s-text></s-banner>
         )}
 
         <s-divider />
 
-        {/* Actions */}
+        {/* ── Actions ── */}
         {isActive && pauseConfirmOpen ? (
           <s-banner tone="warning">
             <s-stack spacing="base">
               <s-stack spacing="tight">
-                <s-text emphasis="bold">Pause {planName}?</s-text>
+                <s-text emphasis="bold">Pause your subscription?</s-text>
                 <s-text size="small">
-                  Waqtly features on your tablet will be restricted until you resume. You can resume at any time from this page.
+                  Waqtly features on your tablet will be restricted until you resume. You can resume any time from this page.
                 </s-text>
               </s-stack>
               <s-stack direction="inline" spacing="tight">
-                <s-button
-                  variant="primary"
-                  tone="critical"
-                  onClick={confirmPause}
-                  disabled={loading}
-                  loading={loading}
-                >
+                <s-button variant="primary" tone="critical" onClick={confirmPause} disabled={loading} loading={loading}>
                   Yes, pause
                 </s-button>
-                <s-button
-                  variant="secondary"
-                  onClick={() => setPauseConfirmOpen(false)}
-                  disabled={loading}
-                >
+                <s-button variant="secondary" onClick={() => setPauseConfirmOpen(false)} disabled={loading}>
                   Keep active
                 </s-button>
               </s-stack>
@@ -389,11 +380,6 @@ function ContractCard({ contract, onRefresh }) {
           </s-banner>
         ) : (
           <s-stack direction="inline" spacing="tight">
-            {updateUrl && (
-              <s-button variant="secondary" href={updateUrl}>
-                Update payment method
-              </s-button>
-            )}
             {isActive && (
               <s-button
                 variant="secondary"
@@ -405,19 +391,12 @@ function ContractCard({ contract, onRefresh }) {
               </s-button>
             )}
             {isPaused && (
-              <s-button
-                variant="primary"
-                onClick={confirmResume}
-                disabled={loading}
-                loading={loading}
-              >
+              <s-button variant="primary" onClick={confirmResume} disabled={loading} loading={loading}>
                 Resume subscription
               </s-button>
             )}
             {isFailed && updateUrl && (
-              <s-button variant="primary" href={updateUrl}>
-                Update payment method
-              </s-button>
+              <s-button variant="primary" href={updateUrl}>Update payment method</s-button>
             )}
           </s-stack>
         )}
@@ -425,25 +404,4 @@ function ContractCard({ contract, onRefresh }) {
       </s-stack>
     </s-box>
   );
-}
-
-function BillingRow({ label, amount, status }) {
-  const prefix = status === 'paid' ? '✓' : status === 'upcoming' || status === 'paused' ? '→' : '–';
-  const isBold = status === 'upcoming' || status === 'paused';
-  const badgeTone = status === 'paid' ? 'success' : status === 'paused' ? 'warning' : 'info';
-  const badgeLabel = status === 'paid' ? 'Paid' : status === 'paused' ? 'Paused' : status === 'upcoming' ? 'Upcoming' : null;
-
-  return (
-    <s-stack direction="inline" spacing="tight" alignItems="center">
-      <s-text size="small" emphasis={isBold ? 'bold' : undefined}>
-        {prefix} {label} · {amount}
-      </s-text>
-      {badgeLabel && <s-badge tone={badgeTone}>{badgeLabel}</s-badge>}
-    </s-stack>
-  );
-}
-
-function capitalise(str) {
-  if (!str) return '';
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
