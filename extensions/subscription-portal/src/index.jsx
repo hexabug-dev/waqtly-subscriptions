@@ -25,17 +25,58 @@ function cap(str) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1).toLowerCase() : '';
 }
 
-// Extension entry — api.customer.id comes from Shopify's authenticated session
+function decodeJwtPayload(token) {
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(part));
+  } catch { return null; }
+}
+
 export default async (root, api) => {
-  const rawId = api?.customer?.id ?? null;
+  const debug = {};
+  let customerId = null;
+
+  try {
+    debug.apiKeys = api ? Object.keys(api).join(', ') : 'api=null';
+
+    // Path 1: direct customer object
+    debug.customerDirect = String(api?.customer?.id ?? 'none');
+
+    // Path 2: session token JWT — sub claim is the customer GID
+    if (api?.sessionToken) {
+      const token = await api.sessionToken.get();
+      debug.tokenObtained = token ? 'yes' : 'no';
+      if (token) {
+        const payload = decodeJwtPayload(token);
+        debug.jwtKeys = payload ? Object.keys(payload).join(', ') : 'decode failed';
+        debug.jwtSub = String(payload?.sub ?? 'none');
+        debug.jwtDest = String(payload?.dest ?? 'none');
+        if (payload?.sub) customerId = payload.sub;
+      }
+    } else {
+      debug.sessionToken = 'not on api';
+    }
+
+    // Path 3: shopify global
+    if (typeof shopify !== 'undefined') {
+      debug.shopifyKeys = Object.keys(shopify).join(', ');
+      debug.shopifyCustomer = String(shopify?.customer?.id ?? 'none');
+    } else {
+      debug.shopify = 'not defined';
+    }
+  } catch (e) {
+    debug.error = String(e);
+  }
+
   // Normalise to GID
-  const customerId = rawId && rawId.includes('gid://')
-    ? rawId
-    : rawId ? `gid://shopify/Customer/${rawId}` : null;
-  render(<SubscriptionPortal customerId={customerId} />, document.body);
+  if (customerId && !customerId.includes('gid://')) {
+    customerId = `gid://shopify/Customer/${customerId}`;
+  }
+
+  render(<SubscriptionPortal customerId={customerId} debug={debug} />, document.body);
 };
 
-function SubscriptionPortal({ customerId }) {
+function SubscriptionPortal({ customerId, debug }) {
   const [contracts, setContracts] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
@@ -63,6 +104,7 @@ function SubscriptionPortal({ customerId }) {
     <s-stack spacing="base">
       <s-heading level="1">My Subscription</s-heading>
       <s-banner tone="critical"><s-text>{loadError}</s-text></s-banner>
+      {debug && <s-text size="small">{JSON.stringify(debug)}</s-text>}
     </s-stack>
   );
 
