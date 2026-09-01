@@ -2,7 +2,7 @@ import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
 import {
-  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner, IndexTable, EmptyState,
+  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -176,64 +176,52 @@ export default function WebhooksPage() {
             </div>
 
             {rows.length === 0 ? (
-              <div style={{ padding: "0 20px 20px" }}>
-                <EmptyState heading="No webhooks registered" image="">
-                  <p>Use the banner above to register all required subscription topics.</p>
-                </EmptyState>
+              <div style={{ padding: "24px 20px", textAlign: "center", color: "#6d7175" }}>
+                <p style={{ margin: 0 }}>No webhooks registered under this app. Use the banner above to register all required topics.</p>
               </div>
             ) : (
-              <IndexTable
-                resourceName={{ singular: "webhook", plural: "webhooks" }}
-                itemCount={rows.length}
-                headings={[
-                  { title: "Topic" },
-                  { title: "Callback URL" },
-                  { title: "Format" },
-                  { title: "Created" },
-                  { title: "" },
-                ]}
-                selectable={false}
-              >
-                {rows.map((w, i) => {
-                  const url = w.endpoint?.__typename === "WebhookHttpEndpoint"
-                    ? w.endpoint.callbackUrl ?? "—"
-                    : w.endpoint?.arn ?? "—";
-                  const isOurs = url.includes("railway.app") || url.includes("waqtly.com");
-                  const topicDisplay = w.topic.toLowerCase().replace(/_/g, " ").replace(/\//g, " / ");
-                  return (
-                    <IndexTable.Row id={w.id} key={w.id} position={i}>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd" fontWeight="semibold">{topicDisplay}</Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodySm" tone="subdued" breakWord>
-                          {url.length > 60 ? `…${url.slice(-50)}` : url}
-                        </Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Badge>{w.format}</Badge>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          {new Date(w.createdAt).toLocaleDateString()}
-                        </Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <InlineStack gap="200" blockAlign="center">
-                          <Badge tone={isOurs ? "success" : "warning"}>
-                            {isOurs ? "App" : "External"}
-                          </Badge>
-                          <Form method="post">
-                            <input type="hidden" name="intent" value="delete" />
-                            <input type="hidden" name="id" value={w.id} />
-                            <Button submit size="slim" tone="critical" loading={isSubmitting}>Delete</Button>
-                          </Form>
-                        </InlineStack>
-                      </IndexTable.Cell>
-                    </IndexTable.Row>
-                  );
-                })}
-              </IndexTable>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      {["Topic", "Callback URL", "Format", "Created", ""].map((h, idx) => (
+                        <th key={idx} style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6d7175", backgroundColor: "#f6f6f7", borderBottom: "1px solid #e1e3e5", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((w) => {
+                      const url = w.endpoint?.__typename === "WebhookHttpEndpoint"
+                        ? w.endpoint.callbackUrl ?? "—"
+                        : w.endpoint?.arn ?? "—";
+                      const isOurs = url.includes("railway.app") || url.includes("waqtly.com");
+                      const topicDisplay = w.topic.toLowerCase().replace(/_/g, " ").replace(/\//g, " / ");
+                      return (
+                        <tr key={w.id} style={{ borderBottom: "1px solid #f1f2f3" }}>
+                          <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223", fontWeight: 600 }}>{topicDisplay}</td>
+                          <td style={{ padding: "12px 16px", fontSize: "12px", color: "#6d7175", maxWidth: "260px", wordBreak: "break-all" }}>
+                            {url.length > 60 ? `…${url.slice(-50)}` : url}
+                          </td>
+                          <td style={{ padding: "12px 16px" }}><Badge>{w.format}</Badge></td>
+                          <td style={{ padding: "12px 16px", fontSize: "13px", color: "#6d7175", whiteSpace: "nowrap" }}>
+                            {new Date(w.createdAt).toLocaleDateString()}
+                          </td>
+                          <td style={{ padding: "12px 16px" }}>
+                            <InlineStack gap="200" blockAlign="center">
+                              <Badge tone={isOurs ? "success" : "warning"}>{isOurs ? "App" : "External"}</Badge>
+                              <Form method="post">
+                                <input type="hidden" name="intent" value="delete" />
+                                <input type="hidden" name="id" value={w.id} />
+                                <Button submit size="slim" tone="critical" loading={isSubmitting}>Delete</Button>
+                              </Form>
+                            </InlineStack>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
         </Layout.Section>

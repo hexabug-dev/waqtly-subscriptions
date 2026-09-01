@@ -2,7 +2,7 @@ import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation, useRouteError } from "@remix-run/react";
 import {
-  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner, IndexTable, EmptyState,
+  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -249,50 +249,38 @@ export default function SellingPlansPage() {
             </div>
 
             {planGroups.length === 0 ? (
-              <div style={{ padding: "0 20px 20px" }}>
-                <EmptyState heading="No selling plan groups" image="">
-                  <p>Click Create to set up the Plus and Nano subscription plans under this app.</p>
-                </EmptyState>
+              <div style={{ padding: "24px 20px", textAlign: "center", color: "#6d7175" }}>
+                <p style={{ margin: 0 }}>No selling plan groups. Click Create to set up the Plus and Nano subscription plans.</p>
               </div>
             ) : (
-              <IndexTable
-                resourceName={{ singular: "plan group", plural: "plan groups" }}
-                itemCount={planGroups.length}
-                headings={[
-                  { title: "Name" },
-                  { title: "Merchant code" },
-                  { title: "Plans" },
-                  { title: "Category" },
-                  { title: "Status" },
-                ]}
-                selectable={false}
-              >
-                {(planGroups as PlanGroup[]).map((group, i) => {
-                  const plan = group.sellingPlans.nodes[0];
-                  const billing = plan?.billingPolicy
-                    ? `Every ${plan.billingPolicy.intervalCount} ${plan.billingPolicy.interval.toLowerCase()}`
-                    : "—";
-                  return (
-                    <IndexTable.Row id={group.id} key={group.id} position={i}>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd" fontWeight="semibold">{group.name}</Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodySm" tone="subdued">{group.id.split("/").pop()}</Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodySm">{billing}</Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Badge>{plan?.category ?? "—"}</Badge>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Badge tone="success">App owned</Badge>
-                      </IndexTable.Cell>
-                    </IndexTable.Row>
-                  );
-                })}
-              </IndexTable>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      {["Name", "Merchant code", "Billing", "Category", "Status"].map((h) => (
+                        <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6d7175", backgroundColor: "#f6f6f7", borderBottom: "1px solid #e1e3e5", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(planGroups as PlanGroup[]).map((group) => {
+                      const plan = group.sellingPlans.nodes[0];
+                      const billing = plan?.billingPolicy
+                        ? `Every ${plan.billingPolicy.intervalCount} ${plan.billingPolicy.interval.toLowerCase()}`
+                        : "—";
+                      return (
+                        <tr key={group.id} style={{ borderBottom: "1px solid #f1f2f3" }}>
+                          <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223", fontWeight: 600 }}>{group.name}</td>
+                          <td style={{ padding: "12px 16px", fontSize: "13px", color: "#6d7175" }}>{group.id.split("/").pop()}</td>
+                          <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223" }}>{billing}</td>
+                          <td style={{ padding: "12px 16px" }}><Badge>{plan?.category ?? "—"}</Badge></td>
+                          <td style={{ padding: "12px 16px" }}><Badge tone="success">App owned</Badge></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
         </Layout.Section>

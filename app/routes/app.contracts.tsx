@@ -2,7 +2,7 @@ import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
 import {
-  Page, Layout, Card, Text, Badge, BlockStack, IndexTable, EmptyState,
+  Page, Layout, Card, Text, Badge, BlockStack,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -75,61 +75,43 @@ export default function ContractsPage() {
 
             <Card padding="0">
               {rows.length === 0 ? (
-                <EmptyState
-                  heading="No contracts yet"
-                  image=""
-                >
-                  <p>Place a test checkout using a selling plan to create the first subscription contract.</p>
-                </EmptyState>
+                <div style={{ padding: "24px 20px", textAlign: "center", color: "#6d7175" }}>
+                  <p style={{ margin: 0 }}>Place a test checkout using a selling plan to create the first subscription contract.</p>
+                </div>
               ) : (
-                <IndexTable
-                  resourceName={{ singular: "contract", plural: "contracts" }}
-                  itemCount={rows.length}
-                  headings={[
-                    { title: "Customer" },
-                    { title: "Product" },
-                    { title: "Plan" },
-                    { title: "Price" },
-                    { title: "Billing" },
-                    { title: "Status" },
-                  ]}
-                  selectable={false}
-                >
-                  {rows.map((contract, i) => {
-                    const line = contract.lines.nodes[0];
-                    const price = line?.currentPrice
-                      ? `${line.currentPrice.currencyCode} ${parseFloat(line.currentPrice.amount).toFixed(2)}`
-                      : "—";
-                    const billing = contract.billingPolicy
-                      ? `Every ${contract.billingPolicy.intervalCount} ${contract.billingPolicy.interval.toLowerCase()}`
-                      : "—";
-                    const email = contract.customer?.defaultEmailAddress?.emailAddress ?? "—";
-                    return (
-                      <IndexTable.Row id={contract.id} key={contract.id} position={i}>
-                        <IndexTable.Cell>
-                          <Text as="span" variant="bodyMd" fontWeight="semibold">{email}</Text>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          <Text as="span" variant="bodyMd">{line?.title ?? "—"}</Text>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          <Text as="span" variant="bodyMd" tone="subdued">{line?.sellingPlanName ?? "—"}</Text>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          <Text as="span" variant="bodyMd">{price}</Text>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          <Text as="span" variant="bodyMd" tone="subdued">{billing}</Text>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          <Badge tone={STATUS_TONE[contract.status] ?? "info"}>
-                            {contract.status}
-                          </Badge>
-                        </IndexTable.Cell>
-                      </IndexTable.Row>
-                    );
-                  })}
-                </IndexTable>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr>
+                        {["Customer", "Product", "Plan", "Price", "Billing", "Status"].map((h) => (
+                          <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6d7175", backgroundColor: "#f6f6f7", borderBottom: "1px solid #e1e3e5", whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((contract) => {
+                        const line = contract.lines.nodes[0];
+                        const price = line?.currentPrice
+                          ? `${line.currentPrice.currencyCode} ${parseFloat(line.currentPrice.amount).toFixed(2)}`
+                          : "—";
+                        const billing = contract.billingPolicy
+                          ? `Every ${contract.billingPolicy.intervalCount} ${contract.billingPolicy.interval.toLowerCase()}`
+                          : "—";
+                        const email = contract.customer?.defaultEmailAddress?.emailAddress ?? "—";
+                        return (
+                          <tr key={contract.id} style={{ borderBottom: "1px solid #f1f2f3" }}>
+                            <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223", fontWeight: 600 }}>{email}</td>
+                            <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223" }}>{line?.title ?? "—"}</td>
+                            <td style={{ padding: "12px 16px", fontSize: "13px", color: "#6d7175" }}>{line?.sellingPlanName ?? "—"}</td>
+                            <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223" }}>{price}</td>
+                            <td style={{ padding: "12px 16px", fontSize: "13px", color: "#6d7175" }}>{billing}</td>
+                            <td style={{ padding: "12px 16px" }}><Badge tone={STATUS_TONE[contract.status] ?? "info"}>{contract.status}</Badge></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
           </BlockStack>
