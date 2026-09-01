@@ -4,20 +4,12 @@ import { unauthenticated } from "../shopify.server";
 
 const SHOP = process.env.SHOPIFY_STORE_DOMAIN ?? "bpb1ru-85.myshopify.com";
 
-const CORS_ORIGINS = ["https://waqtly.com", ".myshopify.com"];
-
-function corsHeaders(origin: string | null) {
-  const allowed =
-    origin && CORS_ORIGINS.some((o) => o.startsWith(".") ? origin.endsWith(o) : origin === o)
-      ? origin
-      : null;
-  return allowed
-    ? {
-        "Access-Control-Allow-Origin": allowed,
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      }
-    : {};
+function corsHeaders(_origin: string | null) {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
