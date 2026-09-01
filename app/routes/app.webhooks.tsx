@@ -2,24 +2,23 @@ import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
 import {
-  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner, DataTable,
+  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner, IndexTable, EmptyState,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 
 const REQUIRED_TOPICS = [
-  "subscription_contracts/create",
-  "subscription_contracts/update",
-  "subscription_billing_attempts/success",
-  "subscription_billing_attempts/failure",
-  "subscription_billing_attempts/challenged",
+  "SUBSCRIPTION_CONTRACTS_CREATE",
+  "SUBSCRIPTION_CONTRACTS_UPDATE",
+  "SUBSCRIPTION_BILLING_ATTEMPTS_SUCCESS",
+  "SUBSCRIPTION_BILLING_ATTEMPTS_FAILURE",
+  "SUBSCRIPTION_BILLING_ATTEMPTS_CHALLENGED",
 ];
 
-const WEBHOOK_CALLBACK = "/webhooks/subscription-contracts";
+const CALLBACK_PATH = "/webhooks/subscription-contracts";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
-
   const response = await admin.graphql(`
     query {
       webhookSubscriptions(first: 25) {
@@ -28,21 +27,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           topic
           endpoint {
             __typename
-            ... on WebhookHttpEndpoint {
-              callbackUrl
-            }
-            ... on WebhookEventBridgeEndpoint {
-              arn
-            }
+            ... on WebhookHttpEndpoint { callbackUrl }
+            ... on WebhookEventBridgeEndpoint { arn }
           }
           createdAt
-          updatedAt
           format
         }
       }
     }
   `);
-
   const data = await response.json();
   return json({ webhooks: data.data?.webhookSubscriptions?.nodes ?? [] });
 };
@@ -67,7 +60,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const data = await res.json();
       const errors = data.data?.webhookSubscriptionDelete?.userErrors ?? [];
       if (errors.length) return json({ success: false, message: errors.map((e: { message: string }) => e.message).join(", ") });
-      return json({ success: true, message: `Deleted ${id}` });
+      return json({ success: true, message: "Webhook deleted." });
     } catch (err) {
       return json({ success: false, message: String(err) });
     }
@@ -75,7 +68,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "register-missing") {
     const appUrl = process.env.SHOPIFY_APP_URL ?? "https://waqtly-subscriptions-production.up.railway.app";
-    const callbackUrl = `${appUrl}${WEBHOOK_CALLBACK}`;
+    const callbackUrl = `${appUrl}${CALLBACK_PATH}`;
     const errors: string[] = [];
     const created: string[] = [];
 
@@ -88,12 +81,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               userErrors { field message }
             }
           }`,
-          {
-            variables: {
-              topic: topic.toUpperCase().replace(/\//g, "_") as string,
-              webhookSubscription: { callbackUrl, format: "JSON" },
-            },
-          }
+          { variables: { topic, webhookSubscription: { callbackUrl, format: "JSON" } } }
         );
         const data = await res.json();
         const errs = data.data?.webhookSubscriptionCreate?.userErrors ?? [];
@@ -110,8 +98,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({
       success: errors.length === 0,
       message: errors.length
-        ? `Registered ${created.length}, failed: ${errors.join("; ")}`
-        : `Registered: ${created.join(", ")}`,
+        ? `${created.length} registered. Errors: ${errors.join("; ")}`
+        : `Registered ${created.length} webhook(s) successfully.`,
     });
   }
 
@@ -132,24 +120,9 @@ export default function WebhooksPage() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  const registeredTopics = new Set((webhooks as Webhook[]).map((w) => w.topic.toLowerCase().replace(/_/g, "/")));
+  const rows = webhooks as Webhook[];
+  const registeredTopics = new Set(rows.map((w) => w.topic));
   const missingTopics = REQUIRED_TOPICS.filter((t) => !registeredTopics.has(t));
-
-  const rows = (webhooks as Webhook[]).map((w) => {
-    const url = w.endpoint?.__typename === "WebhookHttpEndpoint" ? w.endpoint.callbackUrl ?? "—" : w.endpoint?.arn ?? "—";
-    const isOurs = url.includes("railway.app") || url.includes("waqtly.com");
-    return [
-      <Text as="span" variant="bodySm">{w.topic}</Text>,
-      <Badge tone={isOurs ? "success" : "warning"}>{isOurs ? "App" : "Other"}</Badge>,
-      <Text as="span" variant="bodySm" tone="subdued" breakWord>{url}</Text>,
-      <Text as="span" variant="bodySm" tone="subdued">{new Date(w.createdAt).toLocaleDateString()}</Text>,
-      <Form method="post">
-        <input type="hidden" name="intent" value="delete" />
-        <input type="hidden" name="id" value={w.id} />
-        <Button submit size="slim" tone="critical" loading={isSubmitting}>Delete</Button>
-      </Form>,
-    ];
-  });
 
   return (
     <Page>
@@ -157,48 +130,111 @@ export default function WebhooksPage() {
       <Layout>
         {actionData && (
           <Layout.Section>
-            <Banner tone={actionData.success ? "success" : "critical"} title={actionData.message} />
+            <Banner tone={actionData.success ? "success" : "critical"}>
+              <p>{actionData.message}</p>
+            </Banner>
           </Layout.Section>
         )}
 
         {missingTopics.length > 0 && (
           <Layout.Section>
-            <Banner tone="warning" title={`${missingTopics.length} required topic(s) not registered`}>
+            <Banner
+              tone="warning"
+              title={`${missingTopics.length} required topic${missingTopics.length > 1 ? "s" : ""} not registered under this app`}
+              action={{
+                content: isSubmitting ? "Registering…" : "Register Missing",
+                onAction: () => {
+                  const form = document.createElement("form");
+                  form.method = "post";
+                  const input = document.createElement("input");
+                  input.name = "intent";
+                  input.value = "register-missing";
+                  form.appendChild(input);
+                  document.body.appendChild(form);
+                  form.submit();
+                },
+              }}
+            >
               <BlockStack gap="100">
-                {missingTopics.map((t) => <Text key={t} as="p" variant="bodySm">{t}</Text>)}
+                {missingTopics.map((t) => (
+                  <Text key={t} as="p" variant="bodySm" tone="subdued">{t}</Text>
+                ))}
               </BlockStack>
-              <br />
-              <Form method="post">
-                <input type="hidden" name="intent" value="register-missing" />
-                <Button submit loading={isSubmitting}>Register Missing</Button>
-              </Form>
             </Banner>
           </Layout.Section>
         )}
 
         <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
+          <Card padding="0">
+            <div style={{ padding: "16px 20px 12px" }}>
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Registered Webhooks ({webhooks.length})</Text>
+                <Text as="h2" variant="headingMd">Registered Webhooks ({rows.length})</Text>
+                {rows.length > 0 && missingTopics.length === 0 && (
+                  <Badge tone="success">All topics active</Badge>
+                )}
               </InlineStack>
+            </div>
 
-              {webhooks.length === 0 ? (
-                <BlockStack gap="300">
-                  <Text as="p" variant="bodyMd" tone="subdued">No webhooks registered under this app.</Text>
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="register-missing" />
-                    <Button submit loading={isSubmitting}>Register All Required</Button>
-                  </Form>
-                </BlockStack>
-              ) : (
-                <DataTable
-                  columnContentTypes={["text", "text", "text", "text", "text"]}
-                  headings={["Topic", "Owner", "Callback URL", "Created", ""]}
-                  rows={rows}
-                />
-              )}
-            </BlockStack>
+            {rows.length === 0 ? (
+              <div style={{ padding: "0 20px 20px" }}>
+                <EmptyState heading="No webhooks registered" image="">
+                  <p>Use the banner above to register all required subscription topics.</p>
+                </EmptyState>
+              </div>
+            ) : (
+              <IndexTable
+                resourceName={{ singular: "webhook", plural: "webhooks" }}
+                itemCount={rows.length}
+                headings={[
+                  { title: "Topic" },
+                  { title: "Callback URL" },
+                  { title: "Format" },
+                  { title: "Created" },
+                  { title: "" },
+                ]}
+                selectable={false}
+              >
+                {rows.map((w, i) => {
+                  const url = w.endpoint?.__typename === "WebhookHttpEndpoint"
+                    ? w.endpoint.callbackUrl ?? "—"
+                    : w.endpoint?.arn ?? "—";
+                  const isOurs = url.includes("railway.app") || url.includes("waqtly.com");
+                  const topicDisplay = w.topic.toLowerCase().replace(/_/g, " ").replace(/\//g, " / ");
+                  return (
+                    <IndexTable.Row id={w.id} key={w.id} position={i}>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodyMd" fontWeight="semibold">{topicDisplay}</Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodySm" tone="subdued" breakWord>
+                          {url.length > 60 ? `…${url.slice(-50)}` : url}
+                        </Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Badge>{w.format}</Badge>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {new Date(w.createdAt).toLocaleDateString()}
+                        </Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Badge tone={isOurs ? "success" : "warning"}>
+                            {isOurs ? "App" : "External"}
+                          </Badge>
+                          <Form method="post">
+                            <input type="hidden" name="intent" value="delete" />
+                            <input type="hidden" name="id" value={w.id} />
+                            <Button submit size="slim" tone="critical" loading={isSubmitting}>Delete</Button>
+                          </Form>
+                        </InlineStack>
+                      </IndexTable.Cell>
+                    </IndexTable.Row>
+                  );
+                })}
+              </IndexTable>
+            )}
           </Card>
         </Layout.Section>
       </Layout>

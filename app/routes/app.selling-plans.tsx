@@ -2,7 +2,7 @@ import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation, useRouteError } from "@remix-run/react";
 import {
-  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner,
+  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner, IndexTable, EmptyState,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -42,10 +42,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               name
               category
               billingPolicy {
-                ... on SellingPlanRecurringBillingPolicy {
-                  interval
-                  intervalCount
-                }
+                ... on SellingPlanRecurringBillingPolicy { interval intervalCount }
               }
             }
           }
@@ -201,15 +198,18 @@ export function ErrorBoundary() {
   );
 }
 
+type PlanGroup = {
+  id: string;
+  name: string;
+  appId: string | null;
+  sellingPlans: { nodes: { id: string; name: string; category: string; billingPolicy: { interval: string; intervalCount: number } }[] };
+};
+
 export default function SellingPlansPage() {
   const { planGroups } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-
-  // Groups returned by this loader are already scoped to this app's OAuth token,
-  // so all visible groups are owned by this app. appId is a Liquid-facing label
-  // (selling_plan_group.app_id in themes), not the ownership marker.
 
   return (
     <Page>
@@ -220,7 +220,7 @@ export default function SellingPlansPage() {
             <Banner title="Selling plan groups created" tone="success">
               <p>
                 {actionData.created.map((c) => c.name).join(" and ")} created under this app.
-                Run a test checkout to confirm <code>SUBSCRIPTION_CONTRACTS_CREATE</code> fires.
+                Run a test checkout to confirm subscription contracts are created.
               </p>
             </Banner>
           </Layout.Section>
@@ -228,58 +228,72 @@ export default function SellingPlansPage() {
 
         {actionData && !actionData.success && actionData.errors?.length > 0 && (
           <Layout.Section>
-            <Banner title="Errors creating selling plan groups" tone="critical">
+            <Banner title="Error creating selling plan groups" tone="critical">
               {actionData.errors.map((e: string, i: number) => <p key={i}>{e}</p>)}
             </Banner>
           </Layout.Section>
         )}
 
         <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Plan Groups ({planGroups.length})
-              </Text>
-
-              {planGroups.length === 0 && (
-                <BlockStack gap="300">
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    No selling plan groups found. Click below to create them under this app.
-                  </Text>
+          <Card padding="0">
+            <div style={{ padding: "16px 20px 12px" }}>
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="h2" variant="headingMd">Plan Groups ({planGroups.length})</Text>
+                {planGroups.length === 0 && (
                   <Form method="post">
                     <input type="hidden" name="intent" value="fix-ownership" />
-                    <Button submit loading={isSubmitting}>
-                      Create Selling Plan Groups
-                    </Button>
+                    <Button submit loading={isSubmitting} variant="primary">Create Plan Groups</Button>
                   </Form>
-                </BlockStack>
-              )}
+                )}
+              </InlineStack>
+            </div>
 
-              {planGroups.map((group: {
-                id: string;
-                name: string;
-                appId: string | null;
-                sellingPlans: { nodes: { id: string; name: string; category: string }[] };
-              }) => (
-                <Card key={group.id}>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h3" variant="headingSm">{group.name}</Text>
-                      <Badge tone="success">App owned</Badge>
-                    </InlineStack>
-                    <Text as="p" variant="bodySm" tone="subdued">{group.id}</Text>
-                    <Text as="p" variant="bodySm">
-                      Plans: {group.sellingPlans.nodes.map((p) => `${p.name} (${p.category})`).join(", ")}
-                    </Text>
-                    {group.appId && (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Liquid app_id: {group.appId}
-                      </Text>
-                    )}
-                  </BlockStack>
-                </Card>
-              ))}
-            </BlockStack>
+            {planGroups.length === 0 ? (
+              <div style={{ padding: "0 20px 20px" }}>
+                <EmptyState heading="No selling plan groups" image="">
+                  <p>Click Create to set up the Plus and Nano subscription plans under this app.</p>
+                </EmptyState>
+              </div>
+            ) : (
+              <IndexTable
+                resourceName={{ singular: "plan group", plural: "plan groups" }}
+                itemCount={planGroups.length}
+                headings={[
+                  { title: "Name" },
+                  { title: "Merchant code" },
+                  { title: "Plans" },
+                  { title: "Category" },
+                  { title: "Status" },
+                ]}
+                selectable={false}
+              >
+                {(planGroups as PlanGroup[]).map((group, i) => {
+                  const plan = group.sellingPlans.nodes[0];
+                  const billing = plan?.billingPolicy
+                    ? `Every ${plan.billingPolicy.intervalCount} ${plan.billingPolicy.interval.toLowerCase()}`
+                    : "—";
+                  return (
+                    <IndexTable.Row id={group.id} key={group.id} position={i}>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodyMd" fontWeight="semibold">{group.name}</Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodySm" tone="subdued">{group.id.split("/").pop()}</Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodySm">{billing}</Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Badge>{plan?.category ?? "—"}</Badge>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Badge tone="success">App owned</Badge>
+                      </IndexTable.Cell>
+                    </IndexTable.Row>
+                  );
+                })}
+              </IndexTable>
+            )}
           </Card>
         </Layout.Section>
       </Layout>
