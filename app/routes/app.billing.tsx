@@ -34,7 +34,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         status
         nextBillingDate
         customer { defaultEmailAddress { emailAddress } }
-        activationMeta: metafield(namespace: "waqtly", key: "activation_date") { value }
       }
     }
   }`);
@@ -42,7 +41,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const contracts = data?.subscriptionContracts?.nodes ?? [];
 
   const rows: ContractRow[] = contracts.map((c: any) => {
-    const activationDateStr = c.activationMeta?.value ?? null;
+    // activationDate comes from CRM via /api/activate — not yet stored on contracts
+    const activationDateStr: string | null = null;
     const activationDate = activationDateStr ? new Date(activationDateStr) : null;
     const nextBilling = c.nextBillingDate ? new Date(c.nextBillingDate) : null;
     const firstBillingEligible = activationDate ? addMonths(activationDate, FREE_MONTHS) : null;

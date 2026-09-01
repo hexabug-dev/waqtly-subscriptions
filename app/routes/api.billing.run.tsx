@@ -28,7 +28,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         id
         status
         nextBillingDate
-        activationMeta: metafield(namespace: "waqtly", key: "activation_date") { value }
       }
     }
   }`);
@@ -40,7 +39,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const errors: { id: string; error: string }[] = [];
 
   for (const contract of contracts) {
-    const { id, status, nextBillingDate: nextBillingRaw, activationMeta } = contract;
+    const { id, status, nextBillingDate: nextBillingRaw } = contract;
 
     if (status !== "ACTIVE") {
       skipped.push({ id, reason: `status=${status}` });
@@ -53,9 +52,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       continue;
     }
 
-    const activationDateStr = activationMeta?.value;
+    // Activation date is stored externally (CRM); scheduler checks it via lookup table
+    // TODO: replace with DB lookup once CRM integration is live
+    const activationDateStr: string | null = null;
     if (!activationDateStr) {
-      skipped.push({ id, reason: "device not yet activated — no activation_date metafield" });
+      skipped.push({ id, reason: "device not yet activated" });
       continue;
     }
 
