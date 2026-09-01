@@ -9,7 +9,27 @@ embedded = true
 automatically_update_urls_on_dev = true
 
 [webhooks]
-api_version = "2026-07"
+api_version = "2025-10"
+
+[[webhooks.subscriptions]]
+topics = ["subscription_contracts/create"]
+uri = "/webhooks/subscription-contracts"
+
+[[webhooks.subscriptions]]
+topics = ["subscription_contracts/update"]
+uri = "/webhooks/subscription-contracts"
+
+[[webhooks.subscriptions]]
+topics = ["subscription_billing_attempts/success"]
+uri = "/webhooks/subscription-contracts"
+
+[[webhooks.subscriptions]]
+topics = ["subscription_billing_attempts/failure"]
+uri = "/webhooks/subscription-contracts"
+
+[[webhooks.subscriptions]]
+topics = ["subscription_billing_attempts/challenged"]
+uri = "/webhooks/subscription-contracts"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
