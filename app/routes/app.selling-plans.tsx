@@ -104,6 +104,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               input: {
                 name: plan.name,
                 merchantCode: plan.merchantCode,
+                appId: "waqtly-subscriptions",
                 options: ["Subscription Plan"],
                 sellingPlansToCreate: [
                   {
@@ -206,29 +207,19 @@ export default function SellingPlansPage() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  const orphaned = planGroups.filter((g: { appId: string | null }) => !g.appId);
+  // Groups returned by this loader are already scoped to this app's OAuth token,
+  // so all visible groups are owned by this app. appId is a Liquid-facing label
+  // (selling_plan_group.app_id in themes), not the ownership marker.
 
   return (
     <Page>
       <TitleBar title="Selling Plans" />
       <Layout>
-        {orphaned.length > 0 && !actionData?.success && (
-          <Layout.Section>
-            <Banner title={`${orphaned.length} plan group(s) have no app owner`} tone="warning">
-              <p>
-                Shopify cannot auto-create subscription contracts without an app owner on the selling
-                plan group. Click <strong>Fix Ownership</strong> to delete and re-create them under
-                this app. The products will be re-linked automatically.
-              </p>
-            </Banner>
-          </Layout.Section>
-        )}
-
         {actionData?.success && (
           <Layout.Section>
-            <Banner title="Ownership fixed successfully" tone="success">
+            <Banner title="Selling plan groups created" tone="success">
               <p>
-                {actionData.created.map((c) => c.name).join(" and ")} re-created under this app.
+                {actionData.created.map((c) => c.name).join(" and ")} created under this app.
                 Run a test checkout to confirm <code>SUBSCRIPTION_CONTRACTS_CREATE</code> fires.
               </p>
             </Banner>
@@ -246,19 +237,9 @@ export default function SellingPlansPage() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">
-                  Plan Groups ({planGroups.length})
-                </Text>
-                {orphaned.length > 0 && (
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="fix-ownership" />
-                    <Button submit tone="critical" loading={isSubmitting}>
-                      Fix Ownership — Delete &amp; Recreate
-                    </Button>
-                  </Form>
-                )}
-              </InlineStack>
+              <Text as="h2" variant="headingMd">
+                Plan Groups ({planGroups.length})
+              </Text>
 
               {planGroups.length === 0 && (
                 <BlockStack gap="300">
@@ -284,16 +265,17 @@ export default function SellingPlansPage() {
                   <BlockStack gap="200">
                     <InlineStack align="space-between" blockAlign="center">
                       <Text as="h3" variant="headingSm">{group.name}</Text>
-                      {group.appId ? (
-                        <Badge tone="success">App owned</Badge>
-                      ) : (
-                        <Badge tone="critical">appId: null — contracts broken</Badge>
-                      )}
+                      <Badge tone="success">App owned</Badge>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">{group.id}</Text>
                     <Text as="p" variant="bodySm">
                       Plans: {group.sellingPlans.nodes.map((p) => `${p.name} (${p.category})`).join(", ")}
                     </Text>
+                    {group.appId && (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Liquid app_id: {group.appId}
+                      </Text>
+                    )}
                   </BlockStack>
                 </Card>
               ))}
