@@ -1,0 +1,157 @@
+/* Waqtly Subscription Portal — theme app extension styles */
+
+.waqtly-portal {
+  font-family: var(--font-body-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: var(--font-body-size, 14px);
+  color: var(--color-foreground, #1a1a1a);
+  max-width: 720px;
+}
+
+.waqtly-portal__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 20px;
+  color: var(--color-foreground, #1a1a1a);
+}
+
+/* ── Card ── */
+.waqtly-card {
+  border: 1px solid var(--color-border, #e1e3e5);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-background, #fff);
+  margin-bottom: 16px;
+}
+
+/* ── Section within card ── */
+.waqtly-section {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--color-border, #e1e3e5);
+}
+.waqtly-section:last-child {
+  border-bottom: none;
+}
+.waqtly-section__title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-foreground-muted, #6d7175);
+  margin: 0 0 12px;
+}
+
+/* ── Status banner ── */
+.waqtly-banner {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.waqtly-banner--warning { background: #fff3cd; color: #856404; border: 1px solid #ffe69c; }
+.waqtly-banner--critical { background: #f8d7da; color: #842029; border: 1px solid #f5c6cb; }
+
+/* ── Device rows ── */
+.waqtly-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border, #f1f2f3);
+}
+.waqtly-device:last-child { border-bottom: none; }
+.waqtly-device__name { font-weight: 600; font-size: 14px; display: block; }
+.waqtly-device__plan { font-size: 12px; color: var(--color-foreground-muted, #6d7175); display: block; margin-top: 2px; }
+
+/* ── Timeline ── */
+.waqtly-timeline__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border, #f1f2f3);
+}
+.waqtly-timeline__row:last-child { border-bottom: none; }
+.waqtly-timeline__label { flex: 1; font-size: 13px; color: var(--color-foreground, #1a1a1a); }
+.waqtly-timeline__amount { font-size: 13px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ── Payment method ── */
+.waqtly-payment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+/* ── Badges ── */
+.waqtly-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.waqtly-badge--success  { background: #d4edda; color: #1a7a4a; }
+.waqtly-badge--warning  { background: #fff3cd; color: #856404; }
+.waqtly-badge--critical { background: #f8d7da; color: #842029; }
+.waqtly-badge--info     { background: #cce5ff; color: #004085; }
+.waqtly-badge--upcoming { background: #e8eaf6; color: #3949ab; }
+
+/* ── Buttons ── */
+.waqtly-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity 0.15s;
+  text-decoration: none;
+}
+.waqtly-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.waqtly-btn--primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.waqtly-btn--secondary { background: #fff; color: #1a1a1a; border-color: #c9cccf; }
+.waqtly-btn--danger { background: #fff; color: #842029; border-color: #f5c6cb; }
+
+/* ── Actions row ── */
+.waqtly-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Pause confirm ── */
+.waqtly-confirm {
+  background: #fff3cd;
+  border: 1px solid #ffe69c;
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.waqtly-confirm__title { font-weight: 700; font-size: 14px; color: #856404; margin: 0 0 4px; }
+.waqtly-confirm__body  { font-size: 13px; color: #856404; margin: 0 0 12px; }
+
+/* ── Loading / empty ── */
+.waqtly-loading, .waqtly-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--color-foreground-muted, #6d7175);
+  font-size: 14px;
+}
+.waqtly-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e1e3e5;
+  border-top-color: #1a1a1a;
+  border-radius: 50%;
+  animation: waqtly-spin 0.7s linear infinite;
+  margin-bottom: 8px;
+}
+@keyframes waqtly-spin { to { transform: rotate(360deg); } }

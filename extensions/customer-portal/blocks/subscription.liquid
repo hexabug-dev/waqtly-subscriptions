@@ -1,0 +1,21 @@
+{% if customer %}
+<div
+  id="waqtly-portal"
+  data-customer-id="{{ customer.id }}"
+  data-app-url="https://waqtly-subscriptions-production.up.railway.app"
+></div>
+{{ 'waqtly-portal.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'waqtly-portal.js' | asset_url }}" defer></script>
+{% else %}
+<p style="padding:16px;">
+  <a href="/account/login">Sign in</a> to view your subscription.
+</p>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Waqtly Subscription",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}
