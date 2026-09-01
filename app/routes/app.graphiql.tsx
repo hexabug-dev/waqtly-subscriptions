@@ -98,16 +98,15 @@ const PRESETS: { label: string; tag: string; query: string; variables?: string }
     label: "Billing Attempts",
     tag: "query",
     query: `{
-  subscriptionBillingAttempts(
-    subscriptionContractId: "gid://shopify/SubscriptionContract/REPLACE_ID"
-    first: 10
-  ) {
-    nodes {
-      id
-      ready
-      errorMessage
-      errorCode
-      order { id name totalPriceSet { shopMoney { amount currencyCode } } }
+  subscriptionContract(id: "gid://shopify/SubscriptionContract/REPLACE_ID") {
+    billingAttempts(first: 10) {
+      nodes {
+        id
+        ready
+        errorMessage
+        errorCode
+        order { id name totalPriceSet { shopMoney { amount currencyCode } } }
+      }
     }
   }
 }`,
