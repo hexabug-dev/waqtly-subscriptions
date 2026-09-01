@@ -9,7 +9,7 @@ import { authenticate } from "../shopify.server";
 
 const PLAN_CONFIG = [
   {
-    oldId: "gid://shopify/SellingPlanGroup/78452949315",
+    oldId: "gid://shopify/SellingPlanGroup/78453342531",
     name: "Subscribe (Plus) - Entry",
     merchantCode: "subscribe-plus-entry",
     productId: "gid://shopify/Product/14693478891843",
@@ -17,7 +17,7 @@ const PLAN_CONFIG = [
     recurringPrice: "7.99",
   },
   {
-    oldId: "gid://shopify/SellingPlanGroup/78452982083",
+    oldId: "gid://shopify/SellingPlanGroup/78453375299",
     name: "Subscribe (Nano) - Entry",
     merchantCode: "subscribe-nano-entry",
     productId: "gid://shopify/Product/14696508358979",
