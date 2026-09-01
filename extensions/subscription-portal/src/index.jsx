@@ -62,11 +62,14 @@ function SubscriptionPortal({ customerId }) {
       const resp = await fetch(
         `${APP_URL}/api/portal/contracts?customerId=${encodeURIComponent(customerId)}`
       );
-      if (!resp.ok) throw new Error('Bad response');
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '');
+        throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
+      }
       const { contracts: data } = await resp.json();
       setContracts(data ?? []);
-    } catch {
-      setLoadError('Unable to load your subscription. Please try again later.');
+    } catch (err) {
+      setLoadError(`${err.constructor?.name || 'Error'}: ${err.message || String(err)}`);
     }
   }, [customerId]);
 
