@@ -70,16 +70,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       // Fire billing attempt
       const attemptRes = await admin.graphql(
-        `mutation($contractId: ID!, $originTime: DateTime) {
+        `mutation($contractId: ID!, $originTime: DateTime, $idempotencyKey: String!) {
           subscriptionBillingAttemptCreate(
             subscriptionContractId: $contractId
-            subscriptionBillingAttemptInput: { originTime: $originTime }
+            subscriptionBillingAttemptInput: { originTime: $originTime, idempotencyKey: $idempotencyKey }
           ) {
             subscriptionBillingAttempt { id ready errorMessage errorCode }
             userErrors { field message }
           }
         }`,
-        { variables: { contractId: id, originTime: now.toISOString() } }
+        { variables: { contractId: id, originTime: now.toISOString(), idempotencyKey: `billing-${id.split("/").pop()}-${now.toISOString().slice(0, 7)}` } }
       );
       const attemptJson = await attemptRes.json();
       const result = attemptJson.data?.subscriptionBillingAttemptCreate;

@@ -113,6 +113,32 @@ const PRESETS: { label: string; tag: string; query: string; variables?: string }
 }`,
   },
   {
+    label: "Manual Billing Attempt",
+    tag: "mutation",
+    query: `mutation($contractId: ID!, $originTime: DateTime, $idempotencyKey: String!) {
+  subscriptionBillingAttemptCreate(
+    subscriptionContractId: $contractId
+    subscriptionBillingAttemptInput: {
+      originTime: $originTime
+      idempotencyKey: $idempotencyKey
+    }
+  ) {
+    subscriptionBillingAttempt {
+      id
+      ready
+      errorMessage
+      errorCode
+    }
+    userErrors { field message }
+  }
+}`,
+    variables: `{
+  "contractId": "gid://shopify/SubscriptionContract/REPLACE_ID",
+  "originTime": "2026-09-01T00:00:00Z",
+  "idempotencyKey": "test-manual-REPLACE_ID-2026-09-01"
+}`,
+  },
+  {
     label: "Delete Webhook",
     tag: "mutation",
     query: `mutation webhookSubscriptionDelete($id: ID!) {
