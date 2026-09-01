@@ -84,79 +84,85 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Re-create under this app's OAuth token
     for (const plan of PLAN_CONFIG) {
-      const createRes = await admin.graphql(
-        `mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
-          sellingPlanGroupCreate(input: $input, resources: $resources) {
-            sellingPlanGroup {
-              id
-              appId
-              name
+      try {
+        const createRes = await admin.graphql(
+          `mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
+            sellingPlanGroupCreate(input: $input, resources: $resources) {
+              sellingPlanGroup {
+                id
+                appId
+                name
+              }
+              userErrors { field message }
             }
-            userErrors { field message }
-          }
-        }`,
-        {
-          variables: {
-            input: {
-              name: plan.name,
-              merchantCode: plan.merchantCode,
-              options: ["Subscription Plan"],
-              sellingPlans: [
-                {
-                  name: plan.name,
-                  options: ["Subscription Plan"],
-                  position: 1,
-                  category: "SUBSCRIPTION",
-                  billingPolicy: {
-                    recurring: {
-                      interval: "MONTH",
-                      intervalCount: 1,
-                      minCycles: 1,
-                      maxCycles: null,
-                    },
-                  },
-                  deliveryPolicy: {
-                    recurring: {
-                      interval: "MONTH",
-                      intervalCount: 1,
-                    },
-                  },
-                  pricingPolicies: [
-                    {
-                      fixed: {
-                        adjustmentType: "PRICE",
-                        adjustmentValue: { fixedValue: plan.entryPrice },
-                      },
-                    },
-                    {
+          }`,
+          {
+            variables: {
+              input: {
+                name: plan.name,
+                merchantCode: plan.merchantCode,
+                options: ["Subscription Plan"],
+                sellingPlans: [
+                  {
+                    name: plan.name,
+                    options: ["Subscription Plan"],
+                    position: 1,
+                    category: "SUBSCRIPTION",
+                    billingPolicy: {
                       recurring: {
-                        afterCycle: 1,
-                        adjustmentType: "PRICE",
-                        adjustmentValue: { fixedValue: plan.recurringPrice },
+                        interval: "MONTH",
+                        intervalCount: 1,
+                        minCycles: 1,
                       },
                     },
-                  ],
-                },
-              ],
+                    deliveryPolicy: {
+                      recurring: {
+                        interval: "MONTH",
+                        intervalCount: 1,
+                        anchors: [],
+                      },
+                    },
+                    pricingPolicies: [
+                      {
+                        fixed: {
+                          adjustmentType: "PRICE",
+                          adjustmentValue: { fixedValue: plan.entryPrice },
+                        },
+                      },
+                      {
+                        recurring: {
+                          afterCycle: 1,
+                          adjustmentType: "PRICE",
+                          adjustmentValue: { fixedValue: plan.recurringPrice },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+              resources: {
+                productIds: [plan.productId],
+              },
             },
-            resources: {
-              productIds: [plan.productId],
-            },
-          },
+          }
+        );
+
+        const createData = await createRes.json();
+        const result = createData.data?.sellingPlanGroupCreate;
+
+        if (result?.userErrors?.length) {
+          errors.push(`${plan.name}: ${result.userErrors.map((e: { message: string }) => e.message).join(", ")}`);
+        } else if (result?.sellingPlanGroup) {
+          created.push({
+            name: result.sellingPlanGroup.name,
+            id: result.sellingPlanGroup.id,
+            appId: result.sellingPlanGroup.appId,
+          });
+        } else {
+          errors.push(`${plan.name}: No data returned from Shopify`);
         }
-      );
-
-      const createData = await createRes.json();
-      const result = createData.data?.sellingPlanGroupCreate;
-
-      if (result?.userErrors?.length) {
-        errors.push(`${plan.name}: ${result.userErrors.map((e: { message: string }) => e.message).join(", ")}`);
-      } else if (result?.sellingPlanGroup) {
-        created.push({
-          name: result.sellingPlanGroup.name,
-          id: result.sellingPlanGroup.id,
-          appId: result.sellingPlanGroup.appId,
-        });
+      } catch (err) {
+        errors.push(`${plan.name}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
