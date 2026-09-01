@@ -1,9 +1,7 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
-import {
-  Page, Layout, Card, Text, Badge, BlockStack,
-} from "@shopify/polaris";
+import { Page } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 
@@ -15,9 +13,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         nodes {
           id
           status
-          customer {
-            defaultEmailAddress { emailAddress }
-          }
+          customer { defaultEmailAddress { emailAddress } }
           lines(first: 10) {
             nodes {
               title
@@ -40,7 +36,6 @@ type ContractLine = {
   sellingPlanName: string | null;
   currentPrice: { amount: string; currencyCode: string } | null;
 };
-
 type Contract = {
   id: string;
   status: string;
@@ -50,105 +45,119 @@ type Contract = {
   nextBillingDate: string | null;
 };
 
-const STATUS_TONE: Record<string, "success" | "warning" | "critical" | "info"> = {
-  ACTIVE: "success",
-  PAUSED: "warning",
-  CANCELLED: "critical",
-  FAILED: "critical",
-  EXPIRED: "info",
+// ─── Design tokens ───────────────────────────────────────────────
+const card: React.CSSProperties = { background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px" };
+const thStyle: React.CSSProperties = { padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6d7175", backgroundColor: "#f6f6f7", borderBottom: "1px solid #e1e3e5", whiteSpace: "nowrap" };
+const tdStyle: React.CSSProperties = { padding: "12px 16px", fontSize: "13px", color: "#202223", verticalAlign: "top" };
+
+const STATUS_PILL: Record<string, { backgroundColor: string; color: string }> = {
+  ACTIVE:    { backgroundColor: "#d4edda", color: "#1a7a4a" },
+  PAUSED:    { backgroundColor: "#fff3cd", color: "#856404" },
+  CANCELLED: { backgroundColor: "#f8d7da", color: "#842029" },
+  FAILED:    { backgroundColor: "#f8d7da", color: "#842029" },
+  EXPIRED:   { backgroundColor: "#cce5ff", color: "#004085" },
 };
+
+function StatusPill({ status }: { status: string }) {
+  const s = STATUS_PILL[status] ?? { backgroundColor: "#f6f6f7", color: "#6d7175" };
+  return (
+    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, lineHeight: "20px", ...s }}>
+      {status.charAt(0) + status.slice(1).toLowerCase()}
+    </span>
+  );
+}
 
 export default function ContractsPage() {
   const { contracts } = useLoaderData<typeof loader>();
   const rows = contracts as Contract[];
-
-  const active = rows.filter((c) => c.status === "ACTIVE").length;
-  const paused = rows.filter((c) => c.status === "PAUSED").length;
+  const active    = rows.filter((c) => c.status === "ACTIVE").length;
+  const paused    = rows.filter((c) => c.status === "PAUSED").length;
+  const cancelled = rows.filter((c) => c.status === "CANCELLED").length;
 
   return (
     <Page>
       <TitleBar title="Subscription Contracts" />
-      <Layout>
-        <Layout.Section>
-          <BlockStack gap="400">
-            <InlineStatCards total={rows.length} active={active} paused={paused} />
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
-            <Card padding="0">
-              {rows.length === 0 ? (
-                <div style={{ padding: "24px 20px", textAlign: "center", color: "#6d7175" }}>
-                  <p style={{ margin: 0 }}>Place a test checkout using a selling plan to create the first subscription contract.</p>
-                </div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr>
-                        {["Customer", "Product", "Plan", "Price", "Billing", "Status"].map((h) => (
-                          <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6d7175", backgroundColor: "#f6f6f7", borderBottom: "1px solid #e1e3e5", whiteSpace: "nowrap" }}>{h}</th>
-                        ))}
+        {/* Stat cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+          {[
+            { label: "Total",     value: rows.length, color: "#202223" },
+            { label: "Active",    value: active,      color: "#1a7a4a" },
+            { label: "Paused",    value: paused,      color: "#856404" },
+            { label: "Cancelled", value: cancelled,   color: "#6d7175" },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{ ...card, padding: "16px 20px" }}>
+              <p style={{ margin: "0 0 6px", fontSize: "12px", color: "#6d7175", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
+              <p style={{ margin: 0, fontSize: "32px", fontWeight: 700, color, lineHeight: 1 }}>{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Table */}
+        <div style={{ ...card, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px 10px", borderBottom: "1px solid #e1e3e5" }}>
+            <p style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "#202223" }}>All Contracts</p>
+          </div>
+
+          {rows.length === 0 ? (
+            <div style={{ padding: "40px 20px", textAlign: "center", color: "#6d7175" }}>
+              <p style={{ margin: 0, fontSize: "14px" }}>Place a test checkout using a selling plan to create the first subscription contract.</p>
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    {["Customer", "Product(s)", "Plan", "Price", "Billing", "Next date", "Status"].map((h) => (
+                      <th key={h} style={thStyle}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((contract) => {
+                    const lines = contract.lines.nodes;
+                    const billing = contract.billingPolicy
+                      ? `Every ${contract.billingPolicy.intervalCount} ${contract.billingPolicy.interval.toLowerCase()}`
+                      : "—";
+                    const email = contract.customer?.defaultEmailAddress?.emailAddress ?? "—";
+                    return (
+                      <tr key={contract.id} style={{ borderBottom: "1px solid #f1f2f3" }}>
+                        <td style={{ ...tdStyle, fontWeight: 600 }}>{email}</td>
+                        <td style={tdStyle}>
+                          {lines.map((l, i) => (
+                            <div key={i} style={{ lineHeight: "1.6" }}>{l.title}</div>
+                          ))}
+                        </td>
+                        <td style={{ ...tdStyle, color: "#6d7175" }}>
+                          {lines.map((l, i) => (
+                            <div key={i} style={{ lineHeight: "1.6", fontSize: "12px" }}>{l.sellingPlanName ?? "—"}</div>
+                          ))}
+                        </td>
+                        <td style={tdStyle}>
+                          {lines.map((l, i) => (
+                            <div key={i} style={{ lineHeight: "1.6", fontVariantNumeric: "tabular-nums" }}>
+                              {l.currentPrice ? `${l.currentPrice.currencyCode} ${parseFloat(l.currentPrice.amount).toFixed(2)}` : "—"}
+                            </div>
+                          ))}
+                        </td>
+                        <td style={{ ...tdStyle, color: "#6d7175" }}>{billing}</td>
+                        <td style={{ ...tdStyle, color: "#6d7175", fontVariantNumeric: "tabular-nums" }}>
+                          {contract.nextBillingDate ? new Date(contract.nextBillingDate).toLocaleDateString() : "—"}
+                        </td>
+                        <td style={{ padding: "12px 16px", verticalAlign: "top" }}>
+                          <StatusPill status={contract.status} />
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((contract) => {
-                        const lines = contract.lines.nodes;
-                        const billing = contract.billingPolicy
-                          ? `Every ${contract.billingPolicy.intervalCount} ${contract.billingPolicy.interval.toLowerCase()}`
-                          : "—";
-                        const email = contract.customer?.defaultEmailAddress?.emailAddress ?? "—";
-                        return (
-                          <tr key={contract.id} style={{ borderBottom: "1px solid #f1f2f3", verticalAlign: "top" }}>
-                            <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223", fontWeight: 600 }}>{email}</td>
-                            <td style={{ padding: "12px 16px" }}>
-                              {lines.map((l, idx) => (
-                                <div key={idx} style={{ fontSize: "14px", color: "#202223", lineHeight: "1.6" }}>{l.title}</div>
-                              ))}
-                            </td>
-                            <td style={{ padding: "12px 16px" }}>
-                              {lines.map((l, idx) => (
-                                <div key={idx} style={{ fontSize: "13px", color: "#6d7175", lineHeight: "1.6" }}>{l.sellingPlanName ?? "—"}</div>
-                              ))}
-                            </td>
-                            <td style={{ padding: "12px 16px" }}>
-                              {lines.map((l, idx) => (
-                                <div key={idx} style={{ fontSize: "14px", color: "#202223", lineHeight: "1.6" }}>
-                                  {l.currentPrice ? `${l.currentPrice.currencyCode} ${parseFloat(l.currentPrice.amount).toFixed(2)}` : "—"}
-                                </div>
-                              ))}
-                            </td>
-                            <td style={{ padding: "12px 16px", fontSize: "13px", color: "#6d7175" }}>{billing}</td>
-                            <td style={{ padding: "12px 16px" }}><Badge tone={STATUS_TONE[contract.status] ?? "info"}>{contract.status}</Badge></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-          </BlockStack>
-        </Layout.Section>
-      </Layout>
-    </Page>
-  );
-}
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
-function InlineStatCards({ total, active, paused }: { total: number; active: number; paused: number }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
-      {[
-        { label: "Total", value: total, tone: undefined },
-        { label: "Active", value: active, tone: "#1a7a4a" },
-        { label: "Paused", value: paused, tone: "#7a5a1a" },
-      ].map(({ label, value, tone }) => (
-        <Card key={label}>
-          <BlockStack gap="100">
-            <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
-            <Text as="p" variant="heading2xl" fontWeight="bold">
-              <span style={tone ? { color: tone } : {}}>{value}</span>
-            </Text>
-          </BlockStack>
-        </Card>
-      ))}
-    </div>
+      </div>
+    </Page>
   );
 }

@@ -1,9 +1,7 @@
 import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation, useRouteError } from "@remix-run/react";
-import {
-  Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner,
-} from "@shopify/polaris";
+import { Page, Button } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 
@@ -28,7 +26,6 @@ const PLAN_CONFIG = [
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
-
   const response = await admin.graphql(`
     query {
       sellingPlanGroups(first: 20) {
@@ -36,6 +33,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           id
           name
           appId
+          merchantCode
           sellingPlans(first: 5) {
             nodes {
               id
@@ -50,7 +48,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
   `);
-
   const data = await response.json();
   return json({ planGroups: data.data?.sellingPlanGroups?.nodes ?? [] });
 };
@@ -60,33 +57,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const { admin } = await authenticate.admin(request);
     const formData = await request.formData();
     const intent = formData.get("intent") as string;
-
-    if (intent !== "fix-ownership") {
-      return json({ success: false, errors: ["Unknown action"], created: [] });
-    }
+    if (intent !== "fix-ownership") return json({ success: false, errors: ["Unknown action"], created: [] });
 
     const errors: string[] = [];
     const created: { name: string; id: string; appId: string | null }[] = [];
 
-    // Delete old groups — non-fatal; they may already be gone
     for (const plan of PLAN_CONFIG) {
       try {
-        const delRes = await admin.graphql(`
-          mutation {
-            sellingPlanGroupDelete(id: "${plan.oldId}") {
-              deletedSellingPlanGroupId
-              userErrors { field message }
-            }
-          }
-        `);
+        const delRes = await admin.graphql(`mutation { sellingPlanGroupDelete(id: "${plan.oldId}") { deletedSellingPlanGroupId userErrors { field message } } }`);
         await delRes.json();
-      } catch (delErr) {
-        console.error(`[selling-plans] delete ${plan.oldId}:`, delErr);
-      }
+      } catch {}
     }
 
-    // Re-create under this app's OAuth token
-    // In API 2025-10+ the field inside SellingPlanGroupInput is sellingPlansToCreate (was sellingPlans)
     for (const plan of PLAN_CONFIG) {
       try {
         const createRes = await admin.graphql(
@@ -103,81 +85,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 merchantCode: plan.merchantCode,
                 appId: "waqtly-subscriptions",
                 options: ["Subscription Plan"],
-                sellingPlansToCreate: [
-                  {
-                    name: plan.name,
-                    options: ["Subscription Plan"],
-                    position: 1,
-                    category: "SUBSCRIPTION",
-                    billingPolicy: {
-                      recurring: {
-                        interval: "MONTH",
-                        intervalCount: 1,
-                        minCycles: 1,
-                      },
-                    },
-                    deliveryPolicy: {
-                      recurring: {
-                        interval: "MONTH",
-                        intervalCount: 1,
-                      },
-                    },
-                    pricingPolicies: [
-                      {
-                        fixed: {
-                          adjustmentType: "PRICE",
-                          adjustmentValue: { fixedValue: plan.entryPrice },
-                        },
-                      },
-                      {
-                        recurring: {
-                          afterCycle: 1,
-                          adjustmentType: "PRICE",
-                          adjustmentValue: { fixedValue: plan.recurringPrice },
-                        },
-                      },
-                    ],
-                  },
-                ],
+                sellingPlansToCreate: [{
+                  name: plan.name,
+                  options: ["Subscription Plan"],
+                  position: 1,
+                  category: "SUBSCRIPTION",
+                  billingPolicy: { recurring: { interval: "MONTH", intervalCount: 1, minCycles: 1 } },
+                  deliveryPolicy: { recurring: { interval: "MONTH", intervalCount: 1 } },
+                  pricingPolicies: [
+                    { fixed: { adjustmentType: "PRICE", adjustmentValue: { fixedValue: plan.entryPrice } } },
+                    { recurring: { afterCycle: 1, adjustmentType: "PRICE", adjustmentValue: { fixedValue: plan.recurringPrice } } },
+                  ],
+                }],
               },
-              resources: {
-                productIds: [plan.productId],
-              },
+              resources: { productIds: [plan.productId] },
             },
           }
         );
-
         const createData = await createRes.json();
         const result = createData.data?.sellingPlanGroupCreate;
-
         if (result?.userErrors?.length) {
-          const msg = result.userErrors.map((e: { message: string }) => e.message).join(", ");
-          console.error(`[selling-plans] userErrors for ${plan.name}:`, msg);
-          errors.push(`${plan.name}: ${msg}`);
+          errors.push(`${plan.name}: ${result.userErrors.map((e: { message: string }) => e.message).join(", ")}`);
         } else if (result?.sellingPlanGroup) {
-          created.push({
-            name: result.sellingPlanGroup.name,
-            id: result.sellingPlanGroup.id,
-            appId: result.sellingPlanGroup.appId,
-          });
+          created.push({ name: result.sellingPlanGroup.name, id: result.sellingPlanGroup.id, appId: result.sellingPlanGroup.appId });
         } else {
-          console.error(`[selling-plans] no data for ${plan.name}:`, JSON.stringify(createData));
           errors.push(`${plan.name}: No data returned from Shopify`);
         }
       } catch (err) {
-        console.error(`[selling-plans] exception for ${plan.name}:`, err);
         errors.push(`${plan.name}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
-
     return json({ success: errors.length === 0, errors, created });
   } catch (topErr) {
-    console.error("[selling-plans] action top-level error:", topErr);
-    return json({
-      success: false,
-      errors: [`Server error: ${topErr instanceof Error ? topErr.message : String(topErr)}`],
-      created: [],
-    });
+    return json({ success: false, errors: [`Server error: ${topErr instanceof Error ? topErr.message : String(topErr)}`], created: [] });
   }
 };
 
@@ -187,13 +127,10 @@ export function ErrorBoundary() {
   return (
     <Page>
       <TitleBar title="Selling Plans — Error" />
-      <Layout>
-        <Layout.Section>
-          <Banner title="Unexpected error" tone="critical">
-            <p>{message}</p>
-          </Banner>
-        </Layout.Section>
-      </Layout>
+      <div style={{ padding: "16px", backgroundColor: "#f8d7da", border: "1px solid #f5c6cb", borderRadius: "8px", color: "#842029" }}>
+        <strong>Unexpected error</strong>
+        <p style={{ margin: "4px 0 0" }}>{message}</p>
+      </div>
     </Page>
   );
 }
@@ -202,8 +139,27 @@ type PlanGroup = {
   id: string;
   name: string;
   appId: string | null;
+  merchantCode: string | null;
   sellingPlans: { nodes: { id: string; name: string; category: string; billingPolicy: { interval: string; intervalCount: number } }[] };
 };
+
+// ─── Design tokens ───────────────────────────────────────────────
+const card: React.CSSProperties = { background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px" };
+const thStyle: React.CSSProperties = { padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6d7175", backgroundColor: "#f6f6f7", borderBottom: "1px solid #e1e3e5", whiteSpace: "nowrap" };
+const tdStyle: React.CSSProperties = { padding: "12px 16px", fontSize: "13px", color: "#202223", verticalAlign: "top" };
+
+function Pill({ label, tone }: { label: string; tone: "success" | "neutral" | "info" }) {
+  const styles = {
+    success: { backgroundColor: "#d4edda", color: "#1a7a4a" },
+    neutral: { backgroundColor: "#f6f6f7", color: "#6d7175" },
+    info:    { backgroundColor: "#cce5ff", color: "#004085" },
+  };
+  return (
+    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, lineHeight: "20px", ...styles[tone] }}>
+      {label}
+    </span>
+  );
+}
 
 export default function SellingPlansPage() {
   const { planGroups } = useLoaderData<typeof loader>();
@@ -214,77 +170,75 @@ export default function SellingPlansPage() {
   return (
     <Page>
       <TitleBar title="Selling Plans" />
-      <Layout>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
         {actionData?.success && (
-          <Layout.Section>
-            <Banner title="Selling plan groups created" tone="success">
-              <p>
-                {actionData.created.map((c) => c.name).join(" and ")} created under this app.
-                Run a test checkout to confirm subscription contracts are created.
-              </p>
-            </Banner>
-          </Layout.Section>
+          <div style={{ padding: "12px 16px", borderRadius: "8px", border: "1px solid #b7dfb8", backgroundColor: "#d4edda", color: "#1a7a4a", fontSize: "14px" }}>
+            <strong>Plan groups created:</strong> {actionData.created.map((c) => c.name).join(" and ")}
+          </div>
         )}
-
         {actionData && !actionData.success && actionData.errors?.length > 0 && (
-          <Layout.Section>
-            <Banner title="Error creating selling plan groups" tone="critical">
-              {actionData.errors.map((e: string, i: number) => <p key={i}>{e}</p>)}
-            </Banner>
-          </Layout.Section>
+          <div style={{ padding: "12px 16px", borderRadius: "8px", border: "1px solid #f5c6cb", backgroundColor: "#f8d7da", color: "#842029", fontSize: "14px" }}>
+            <strong>Error:</strong> {actionData.errors.join("; ")}
+          </div>
         )}
 
-        <Layout.Section>
-          <Card padding="0">
-            <div style={{ padding: "16px 20px 12px" }}>
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Plan Groups ({planGroups.length})</Text>
-                {planGroups.length === 0 && (
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="fix-ownership" />
-                    <Button submit loading={isSubmitting} variant="primary">Create Plan Groups</Button>
-                  </Form>
-                )}
-              </InlineStack>
-            </div>
-
-            {planGroups.length === 0 ? (
-              <div style={{ padding: "24px 20px", textAlign: "center", color: "#6d7175" }}>
-                <p style={{ margin: 0 }}>No selling plan groups. Click Create to set up the Plus and Nano subscription plans.</p>
-              </div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr>
-                      {["Name", "Merchant code", "Billing", "Category", "Status"].map((h) => (
-                        <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6d7175", backgroundColor: "#f6f6f7", borderBottom: "1px solid #e1e3e5", whiteSpace: "nowrap" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(planGroups as PlanGroup[]).map((group) => {
-                      const plan = group.sellingPlans.nodes[0];
-                      const billing = plan?.billingPolicy
-                        ? `Every ${plan.billingPolicy.intervalCount} ${plan.billingPolicy.interval.toLowerCase()}`
-                        : "—";
-                      return (
-                        <tr key={group.id} style={{ borderBottom: "1px solid #f1f2f3" }}>
-                          <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223", fontWeight: 600 }}>{group.name}</td>
-                          <td style={{ padding: "12px 16px", fontSize: "13px", color: "#6d7175" }}>{group.id.split("/").pop()}</td>
-                          <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223" }}>{billing}</td>
-                          <td style={{ padding: "12px 16px" }}><Badge>{plan?.category ?? "—"}</Badge></td>
-                          <td style={{ padding: "12px 16px" }}><Badge tone="success">App owned</Badge></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+        <div style={{ ...card, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px 10px", borderBottom: "1px solid #e1e3e5", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <p style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "#202223" }}>
+              Plan Groups ({planGroups.length})
+            </p>
+            {planGroups.length === 0 && (
+              <Form method="post">
+                <input type="hidden" name="intent" value="fix-ownership" />
+                <Button submit loading={isSubmitting} variant="primary">Create Plan Groups</Button>
+              </Form>
             )}
-          </Card>
-        </Layout.Section>
-      </Layout>
+          </div>
+
+          {planGroups.length === 0 ? (
+            <div style={{ padding: "40px 20px", textAlign: "center" }}>
+              <p style={{ margin: 0, fontSize: "14px", color: "#6d7175" }}>
+                No selling plan groups. Click Create to set up the Plus and Nano subscription plans.
+              </p>
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    {["Name", "Merchant code", "Billing", "Category", "Status"].map((h) => (
+                      <th key={h} style={thStyle}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(planGroups as PlanGroup[]).map((group) => {
+                    const plan = group.sellingPlans.nodes[0];
+                    const billing = plan?.billingPolicy
+                      ? `Every ${plan.billingPolicy.intervalCount} ${plan.billingPolicy.interval.toLowerCase()}`
+                      : "—";
+                    return (
+                      <tr key={group.id} style={{ borderBottom: "1px solid #f1f2f3" }}>
+                        <td style={{ ...tdStyle, fontWeight: 600 }}>{group.name}</td>
+                        <td style={{ ...tdStyle, color: "#6d7175", fontSize: "12px", fontFamily: "monospace" }}>{group.merchantCode ?? group.id.split("/").pop()}</td>
+                        <td style={tdStyle}>{billing}</td>
+                        <td style={{ padding: "12px 16px", verticalAlign: "top" }}>
+                          <Pill label={plan?.category ?? "—"} tone="info" />
+                        </td>
+                        <td style={{ padding: "12px 16px", verticalAlign: "top" }}>
+                          <Pill label="App owned" tone="success" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+      </div>
     </Page>
   );
 }
