@@ -2,7 +2,7 @@
 
 client_id = "cfa6249b93adcd8462081b7d8400d5f2"
 name = "Waqtly Subscriptions"
-application_url = "http://localhost:3333"
+application_url = "https://waqtly-subscriptions-production.up.railway.app"
 embedded = true
 
 [build]
