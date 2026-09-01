@@ -19,6 +19,7 @@ export default function App() {
         <a href="/app/selling-plans">Selling Plans</a>
         <a href="/app/contracts">Contracts</a>
         <a href="/app/webhooks">Webhooks</a>
+        <a href="/app/billing">Billing</a>
         <a href="/app/graphiql">GraphiQL</a>
       </NavMenu>
       <Outlet />
