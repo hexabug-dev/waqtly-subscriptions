@@ -32,57 +32,23 @@ function decodeJwtPayload(token) {
   } catch { return null; }
 }
 
-export default async (root, api) => {
-  const debug = {};
+// Customer ID comes from Shopify's session token (JWT sub claim = customer GID)
+export default async (_root, _api) => {
   let customerId = null;
-
   try {
-    // --- authenticatedAccount ---
-    const auth = shopify?.authenticatedAccount;
-    debug.authType = typeof auth;
-    if (auth && typeof auth === 'object') {
-      debug.authKeys = Object.keys(auth).join(', ');
-      debug.authId = String(auth?.id ?? 'none');
-      debug.authCurrent = String(auth?.current?.id ?? 'none');
-      debug.authCustomerId = String(auth?.customer?.id ?? 'none');
-      // signals pattern: .value or .current
-      const val = auth?.value ?? auth?.current;
-      debug.authValType = typeof val;
-      debug.authValId = String(val?.id ?? val?.customer?.id ?? 'none');
-      if (val?.id) customerId = val.id;
-      else if (val?.customer?.id) customerId = val.customer.id;
-      else if (auth?.id) customerId = auth.id;
-      else if (auth?.customer?.id) customerId = auth.customer.id;
-    }
-
-    // --- sessionToken on shopify global ---
-    if (!customerId && shopify?.sessionToken) {
-      debug.stType = typeof shopify.sessionToken;
-      const token = typeof shopify.sessionToken.get === 'function'
-        ? await shopify.sessionToken.get()
-        : null;
-      debug.tokenObtained = token ? 'yes (len ' + token.length + ')' : 'no';
-      if (token) {
-        const payload = decodeJwtPayload(token);
-        debug.jwtKeys = payload ? Object.keys(payload).join(', ') : 'decode failed';
-        debug.jwtSub = String(payload?.sub ?? 'none');
-        debug.jwtCustomerId = String(payload?.customer_id ?? 'none');
-        if (payload?.sub) customerId = payload.sub;
-        else if (payload?.customer_id) customerId = payload.customer_id;
-      }
-    }
-  } catch (e) {
-    debug.error = String(e);
-  }
+    const token = await shopify.sessionToken.get();
+    const payload = decodeJwtPayload(token);
+    if (payload?.sub) customerId = payload.sub;
+  } catch { /* render will show load error */ }
 
   if (customerId && !customerId.includes('gid://')) {
     customerId = `gid://shopify/Customer/${customerId}`;
   }
 
-  render(<SubscriptionPortal customerId={customerId} debug={debug} />, document.body);
+  render(<SubscriptionPortal customerId={customerId} />, document.body);
 };
 
-function SubscriptionPortal({ customerId, debug }) {
+function SubscriptionPortal({ customerId }) {
   const [contracts, setContracts] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
@@ -110,7 +76,6 @@ function SubscriptionPortal({ customerId, debug }) {
     <s-stack spacing="base">
       <s-heading level="1">My Subscription</s-heading>
       <s-banner tone="critical"><s-text>{loadError}</s-text></s-banner>
-      {debug && <s-text size="small">{JSON.stringify(debug)}</s-text>}
     </s-stack>
   );
 
@@ -141,7 +106,6 @@ function ContractCard({ contract, customerId, onRefresh }) {
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
 
-  // Railway returns lines as nodes array (Admin API shape)
   const lines = contract.lines?.nodes ?? contract.lines?.edges?.map((e) => e.node) ?? [];
   const pm = contract.customerPaymentMethod;
   const pmCard = pm?.instrument;
@@ -177,7 +141,7 @@ function ContractCard({ contract, customerId, onRefresh }) {
         throw new Error(body.error || 'Request failed');
       }
       await onRefresh();
-    } catch (err) {
+    } catch {
       setActionError(`Unable to ${act} your subscription. Contact support@waqtly.com.`);
     } finally {
       setLoading(false);
@@ -200,7 +164,6 @@ function ContractCard({ contract, customerId, onRefresh }) {
 
       <s-box background="base" padding="none" border="base">
 
-        {/* Devices */}
         <s-box padding="base">
           <s-stack spacing="tight">
             <s-text size="small" tone="subdued" emphasis="bold">DEVICES</s-text>
@@ -220,7 +183,6 @@ function ContractCard({ contract, customerId, onRefresh }) {
 
         <s-divider />
 
-        {/* Billing timeline */}
         <s-box padding="base">
           <s-stack spacing="tight">
             <s-text size="small" tone="subdued" emphasis="bold">BILLING TIMELINE</s-text>
