@@ -3,4 +3,5 @@ api_version = "2025-10"
 [[extensions]]
 name = "Waqtly Subscription Portal"
 handle = "waqtly-customer-portal"
+uid = "370c883f-f5cc-9848-7a95-58d4d52c2f774edef716"
 type = "theme"
