@@ -18,7 +18,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           customer {
             defaultEmailAddress { emailAddress }
           }
-          lines(first: 3) {
+          lines(first: 10) {
             nodes {
               title
               sellingPlanName
@@ -90,20 +90,31 @@ export default function ContractsPage() {
                     </thead>
                     <tbody>
                       {rows.map((contract) => {
-                        const line = contract.lines.nodes[0];
-                        const price = line?.currentPrice
-                          ? `${line.currentPrice.currencyCode} ${parseFloat(line.currentPrice.amount).toFixed(2)}`
-                          : "—";
+                        const lines = contract.lines.nodes;
                         const billing = contract.billingPolicy
                           ? `Every ${contract.billingPolicy.intervalCount} ${contract.billingPolicy.interval.toLowerCase()}`
                           : "—";
                         const email = contract.customer?.defaultEmailAddress?.emailAddress ?? "—";
                         return (
-                          <tr key={contract.id} style={{ borderBottom: "1px solid #f1f2f3" }}>
+                          <tr key={contract.id} style={{ borderBottom: "1px solid #f1f2f3", verticalAlign: "top" }}>
                             <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223", fontWeight: 600 }}>{email}</td>
-                            <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223" }}>{line?.title ?? "—"}</td>
-                            <td style={{ padding: "12px 16px", fontSize: "13px", color: "#6d7175" }}>{line?.sellingPlanName ?? "—"}</td>
-                            <td style={{ padding: "12px 16px", fontSize: "14px", color: "#202223" }}>{price}</td>
+                            <td style={{ padding: "12px 16px" }}>
+                              {lines.map((l, idx) => (
+                                <div key={idx} style={{ fontSize: "14px", color: "#202223", lineHeight: "1.6" }}>{l.title}</div>
+                              ))}
+                            </td>
+                            <td style={{ padding: "12px 16px" }}>
+                              {lines.map((l, idx) => (
+                                <div key={idx} style={{ fontSize: "13px", color: "#6d7175", lineHeight: "1.6" }}>{l.sellingPlanName ?? "—"}</div>
+                              ))}
+                            </td>
+                            <td style={{ padding: "12px 16px" }}>
+                              {lines.map((l, idx) => (
+                                <div key={idx} style={{ fontSize: "14px", color: "#202223", lineHeight: "1.6" }}>
+                                  {l.currentPrice ? `${l.currentPrice.currencyCode} ${parseFloat(l.currentPrice.amount).toFixed(2)}` : "—"}
+                                </div>
+                              ))}
+                            </td>
                             <td style={{ padding: "12px 16px", fontSize: "13px", color: "#6d7175" }}>{billing}</td>
                             <td style={{ padding: "12px 16px" }}><Badge tone={STATUS_TONE[contract.status] ?? "info"}>{contract.status}</Badge></td>
                           </tr>
