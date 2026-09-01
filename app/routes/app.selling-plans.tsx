@@ -1,6 +1,6 @@
 import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigation, useRouteError } from "@remix-run/react";
 import {
   Page, Layout, Card, Text, Badge, Button, BlockStack, InlineStack, Banner,
 } from "@shopify/polaris";
@@ -15,7 +15,6 @@ const PLAN_CONFIG = [
     productId: "gid://shopify/Product/14693478891843",
     entryPrice: "139.00",
     recurringPrice: "7.99",
-    currency: "EUR",
   },
   {
     oldId: "gid://shopify/SellingPlanGroup/78452982083",
@@ -24,7 +23,6 @@ const PLAN_CONFIG = [
     productId: "gid://shopify/Product/14696508358979",
     entryPrice: "99.00",
     recurringPrice: "7.99",
-    currency: "EUR",
   },
 ];
 
@@ -61,25 +59,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  const formData = await request.formData();
-  const intent = formData.get("intent") as string;
+  try {
+    const { admin } = await authenticate.admin(request);
+    const formData = await request.formData();
+    const intent = formData.get("intent") as string;
 
-  if (intent === "fix-ownership") {
+    if (intent !== "fix-ownership") {
+      return json({ success: false, errors: ["Unknown action"], created: [] });
+    }
+
     const errors: string[] = [];
     const created: { name: string; id: string; appId: string | null }[] = [];
 
-    // Delete old groups (errors here are non-fatal — they may already be gone)
+    // Delete old groups — non-fatal; they may already be gone
     for (const plan of PLAN_CONFIG) {
-      const delRes = await admin.graphql(`
-        mutation {
-          sellingPlanGroupDelete(id: "${plan.oldId}") {
-            deletedSellingPlanGroupId
-            userErrors { field message }
+      try {
+        const delRes = await admin.graphql(`
+          mutation {
+            sellingPlanGroupDelete(id: "${plan.oldId}") {
+              deletedSellingPlanGroupId
+              userErrors { field message }
+            }
           }
-        }
-      `);
-      await delRes.json(); // consume response
+        `);
+        await delRes.json();
+      } catch (delErr) {
+        console.error(`[selling-plans] delete ${plan.oldId}:`, delErr);
+      }
     }
 
     // Re-create under this app's OAuth token
@@ -119,7 +125,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                       recurring: {
                         interval: "MONTH",
                         intervalCount: 1,
-                        anchors: [],
                       },
                     },
                     pricingPolicies: [
@@ -148,10 +153,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
 
         const createData = await createRes.json();
+
+        // Surface top-level GraphQL errors (network/auth/schema level)
+        if (createData.errors?.length) {
+          const msg = createData.errors.map((e: { message: string }) => e.message).join("; ");
+          console.error(`[selling-plans] graphql error for ${plan.name}:`, msg);
+          errors.push(`${plan.name}: ${msg}`);
+          continue;
+        }
+
         const result = createData.data?.sellingPlanGroupCreate;
 
         if (result?.userErrors?.length) {
-          errors.push(`${plan.name}: ${result.userErrors.map((e: { message: string }) => e.message).join(", ")}`);
+          const msg = result.userErrors.map((e: { message: string }) => e.message).join(", ");
+          console.error(`[selling-plans] userErrors for ${plan.name}:`, msg);
+          errors.push(`${plan.name}: ${msg}`);
         } else if (result?.sellingPlanGroup) {
           created.push({
             name: result.sellingPlanGroup.name,
@@ -159,18 +175,42 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             appId: result.sellingPlanGroup.appId,
           });
         } else {
+          console.error(`[selling-plans] no data returned for ${plan.name}:`, JSON.stringify(createData));
           errors.push(`${plan.name}: No data returned from Shopify`);
         }
       } catch (err) {
+        console.error(`[selling-plans] exception for ${plan.name}:`, err);
         errors.push(`${plan.name}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
     return json({ success: errors.length === 0, errors, created });
+  } catch (topErr) {
+    console.error("[selling-plans] action top-level error:", topErr);
+    return json({
+      success: false,
+      errors: [`Server error: ${topErr instanceof Error ? topErr.message : String(topErr)}`],
+      created: [],
+    });
   }
-
-  return json({ success: false, errors: ["Unknown action"], created: [] });
 };
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    <Page>
+      <TitleBar title="Selling Plans — Error" />
+      <Layout>
+        <Layout.Section>
+          <Banner title="Unexpected error" tone="critical">
+            <p>{message}</p>
+          </Banner>
+        </Layout.Section>
+      </Layout>
+    </Page>
+  );
+}
 
 export default function SellingPlansPage() {
   const { planGroups } = useLoaderData<typeof loader>();
@@ -179,7 +219,6 @@ export default function SellingPlansPage() {
   const isSubmitting = navigation.state === "submitting";
 
   const orphaned = planGroups.filter((g: { appId: string | null }) => !g.appId);
-  const owned = planGroups.filter((g: { appId: string | null }) => g.appId);
 
   return (
     <Page>
@@ -202,7 +241,6 @@ export default function SellingPlansPage() {
             <Banner title="Ownership fixed successfully" tone="success">
               <p>
                 {actionData.created.map((c) => c.name).join(" and ")} re-created under this app.
-                New IDs assigned by Shopify — update your docs with the IDs shown below.
                 Run a test checkout to confirm <code>SUBSCRIPTION_CONTRACTS_CREATE</code> fires.
               </p>
             </Banner>
@@ -211,7 +249,7 @@ export default function SellingPlansPage() {
 
         {actionData && !actionData.success && actionData.errors?.length > 0 && (
           <Layout.Section>
-            <Banner title="Some errors occurred" tone="critical">
+            <Banner title="Errors creating selling plan groups" tone="critical">
               {actionData.errors.map((e: string, i: number) => <p key={i}>{e}</p>)}
             </Banner>
           </Layout.Section>
@@ -235,10 +273,17 @@ export default function SellingPlansPage() {
               </InlineStack>
 
               {planGroups.length === 0 && (
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  No selling plan groups found. They may have been deleted. Use the button above
-                  to re-create them.
-                </Text>
+                <BlockStack gap="300">
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    No selling plan groups found. Click below to create them under this app.
+                  </Text>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="fix-ownership" />
+                    <Button submit loading={isSubmitting}>
+                      Create Selling Plan Groups
+                    </Button>
+                  </Form>
+                </BlockStack>
               )}
 
               {planGroups.map((group: {
@@ -264,15 +309,6 @@ export default function SellingPlansPage() {
                   </BlockStack>
                 </Card>
               ))}
-
-              {planGroups.length === 0 && orphaned.length === 0 && (
-                <Form method="post">
-                  <input type="hidden" name="intent" value="fix-ownership" />
-                  <Button submit loading={isSubmitting}>
-                    Create Selling Plan Groups
-                  </Button>
-                </Form>
-              )}
             </BlockStack>
           </Card>
         </Layout.Section>
