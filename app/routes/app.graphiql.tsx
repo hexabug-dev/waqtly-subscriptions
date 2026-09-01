@@ -95,6 +95,24 @@ const PRESETS: { label: string; tag: string; query: string; variables?: string }
 }`,
   },
   {
+    label: "Billing Attempts",
+    tag: "query",
+    query: `{
+  subscriptionBillingAttempts(
+    subscriptionContractId: "gid://shopify/SubscriptionContract/REPLACE_ID"
+    first: 10
+  ) {
+    nodes {
+      id
+      ready
+      errorMessage
+      errorCode
+      order { id name totalPriceSet { shopMoney { amount currencyCode } } }
+    }
+  }
+}`,
+  },
+  {
     label: "Delete Webhook",
     tag: "mutation",
     query: `mutation webhookSubscriptionDelete($id: ID!) {
@@ -185,7 +203,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ? await admin.graphql(query, { variables })
       : await admin.graphql(query);
     const data = await response.json();
-    return json({ error: null, result: data, ms: Date.now() - start });
+    const { headers: _h, ...cleanData } = data as Record<string, unknown>;
+    return json({ error: null, result: cleanData, ms: Date.now() - start });
   } catch (err) {
     return json({
       error: err instanceof Error ? err.message : String(err),
