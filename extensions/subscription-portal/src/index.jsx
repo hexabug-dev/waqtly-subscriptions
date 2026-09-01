@@ -4,55 +4,6 @@ import { useState, useEffect, useCallback } from 'preact/hooks';
 
 const APP_URL = 'https://waqtly-subscriptions-production.up.railway.app';
 
-const SUBSCRIPTIONS_QUERY = `
-  query GetSubscriptions {
-    customer {
-      id
-      subscriptionContracts(first: 10) {
-        edges {
-          node {
-            id
-            status
-            createdAt
-            nextBillingDate
-            originOrder {
-              totalPrice { amount currencyCode }
-            }
-            customerPaymentMethod {
-              id
-              instrumentUpdateUrl
-              instrument {
-                ... on CustomerCreditCard {
-                  brand
-                  lastDigits
-                  expiryMonth
-                  expiryYear
-                }
-              }
-            }
-            lines(first: 10) {
-              edges {
-                node {
-                  id
-                  title
-                  sellingPlanName
-                  currentPrice { amount currencyCode }
-                  pricingPolicy {
-                    cycleDiscounts {
-                      afterCycle
-                      computedPrice { amount currencyCode }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-`;
-
 function money(amount, currency) {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -74,32 +25,39 @@ function cap(str) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1).toLowerCase() : '';
 }
 
-export default async () => {
-  render(<SubscriptionPortal />, document.body);
+// Extension entry — api.customer.id comes from Shopify's authenticated session
+export default async (root, api) => {
+  const rawId = api?.customer?.id ?? null;
+  // Normalise to GID
+  const customerId = rawId && rawId.includes('gid://')
+    ? rawId
+    : rawId ? `gid://shopify/Customer/${rawId}` : null;
+  render(<SubscriptionPortal customerId={customerId} />, document.body);
 };
 
-function SubscriptionPortal() {
+function SubscriptionPortal({ customerId }) {
   const [contracts, setContracts] = useState(null);
-  const [customerId, setCustomerId] = useState(null);
   const [loadError, setLoadError] = useState(null);
-  const [debugInfo, setDebugInfo] = useState(null);
 
   const load = useCallback(async () => {
     setLoadError(null);
+    if (!customerId) {
+      setLoadError('Unable to identify your account. Please try again.');
+      return;
+    }
     try {
-      const result = await shopify.query(SUBSCRIPTIONS_QUERY);
-      setDebugInfo(JSON.stringify(result, null, 2));
-      const cid = result?.data?.customer?.id ?? null;
-      const edges = result?.data?.customer?.subscriptionContracts?.edges ?? [];
-      setCustomerId(cid);
-      setContracts(edges.map((e) => e.node));
-    } catch (err) {
-      setDebugInfo('CATCH: ' + String(err));
+      const resp = await fetch(
+        `${APP_URL}/api/portal/contracts?customerId=${encodeURIComponent(customerId)}`
+      );
+      if (!resp.ok) throw new Error('Bad response');
+      const { contracts: data } = await resp.json();
+      setContracts(data ?? []);
+    } catch {
       setLoadError('Unable to load your subscription. Please try again later.');
     }
-  }, []);
+  }, [customerId]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   if (loadError) return (
     <s-stack spacing="base">
@@ -121,12 +79,7 @@ function SubscriptionPortal() {
     <s-stack spacing="loose">
       <s-heading level="1">My Subscription</s-heading>
       {visible.length === 0
-        ? (
-          <s-stack spacing="base">
-            <s-text tone="subdued">You have no active subscriptions.</s-text>
-            {debugInfo && <s-text size="small">{debugInfo}</s-text>}
-          </s-stack>
-        )
+        ? <s-text tone="subdued">You have no active subscriptions.</s-text>
         : visible.map((c) => (
           <ContractCard key={c.id} contract={c} customerId={customerId} onRefresh={load} />
         ))
@@ -140,7 +93,8 @@ function ContractCard({ contract, customerId, onRefresh }) {
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
 
-  const lines = contract.lines?.edges?.map((e) => e.node) ?? [];
+  // Railway returns lines as nodes array (Admin API shape)
+  const lines = contract.lines?.nodes ?? contract.lines?.edges?.map((e) => e.node) ?? [];
   const pm = contract.customerPaymentMethod;
   const pmCard = pm?.instrument;
   const updateUrl = pm?.instrumentUpdateUrl;
@@ -176,8 +130,7 @@ function ContractCard({ contract, customerId, onRefresh }) {
       }
       await onRefresh();
     } catch (err) {
-      const label = act === 'pause' ? 'pause' : 'resume';
-      setActionError(`Unable to ${label} your subscription. Contact support@waqtly.com.`);
+      setActionError(`Unable to ${act} your subscription. Contact support@waqtly.com.`);
     } finally {
       setLoading(false);
     }
@@ -186,7 +139,6 @@ function ContractCard({ contract, customerId, onRefresh }) {
   return (
     <s-stack spacing="base">
 
-      {/* ── Status alerts ── */}
       {isPaused && (
         <s-banner tone="warning">
           <s-text>Your subscription is paused. Waqtly features on your tablet are restricted until you resume.</s-text>
@@ -198,7 +150,6 @@ function ContractCard({ contract, customerId, onRefresh }) {
         </s-banner>
       )}
 
-      {/* ── Card ── */}
       <s-box background="base" padding="none" border="base">
 
         {/* Devices */}
@@ -228,12 +179,8 @@ function ContractCard({ contract, customerId, onRefresh }) {
 
             {originPrice && (
               <s-columns columns="1fr auto auto" alignY="center" spacing="base">
-                <s-text size="small">
-                  Entry payment{startDate ? ` — ${startDate}` : ''}
-                </s-text>
-                <s-text size="small" emphasis="bold">
-                  {money(originPrice.amount, originPrice.currencyCode)}
-                </s-text>
+                <s-text size="small">Entry payment{startDate ? ` — ${startDate}` : ''}</s-text>
+                <s-text size="small" emphasis="bold">{money(originPrice.amount, originPrice.currencyCode)}</s-text>
                 <s-badge tone="success">Paid</s-badge>
               </s-columns>
             )}
@@ -265,7 +212,6 @@ function ContractCard({ contract, customerId, onRefresh }) {
           </s-stack>
         </s-box>
 
-        {/* Payment method */}
         {pmCard && (
           <>
             <s-divider />
@@ -288,7 +234,6 @@ function ContractCard({ contract, customerId, onRefresh }) {
           </>
         )}
 
-        {/* Actions */}
         <s-divider />
         <s-box padding="base">
           <s-stack spacing="base">
@@ -301,25 +246,15 @@ function ContractCard({ contract, customerId, onRefresh }) {
                 <s-stack spacing="base">
                   <s-stack spacing="none">
                     <s-text emphasis="bold">Pause your subscription?</s-text>
-                    <s-text size="small">
-                      Waqtly features on your tablet will be restricted until you resume.
-                    </s-text>
+                    <s-text size="small">Waqtly features on your tablet will be restricted until you resume.</s-text>
                   </s-stack>
                   <s-stack direction="inline" spacing="tight">
-                    <s-button
-                      variant="primary"
-                      tone="critical"
-                      onClick={() => callAction('pause')}
-                      disabled={loading}
-                      loading={loading}
-                    >
+                    <s-button variant="primary" tone="critical"
+                      onClick={() => callAction('pause')} disabled={loading} loading={loading}>
                       Yes, pause
                     </s-button>
-                    <s-button
-                      variant="secondary"
-                      onClick={() => setPauseOpen(false)}
-                      disabled={loading}
-                    >
+                    <s-button variant="secondary"
+                      onClick={() => setPauseOpen(false)} disabled={loading}>
                       Keep active
                     </s-button>
                   </s-stack>
@@ -328,22 +263,15 @@ function ContractCard({ contract, customerId, onRefresh }) {
             ) : (
               <s-stack direction="inline" spacing="tight">
                 {isActive && (
-                  <s-button
-                    variant="secondary"
-                    tone="critical"
+                  <s-button variant="secondary" tone="critical"
                     onClick={() => { setActionError(null); setPauseOpen(true); }}
-                    disabled={loading}
-                  >
+                    disabled={loading}>
                     Pause subscription
                   </s-button>
                 )}
                 {isPaused && (
-                  <s-button
-                    variant="primary"
-                    onClick={() => callAction('resume')}
-                    disabled={loading}
-                    loading={loading}
-                  >
+                  <s-button variant="primary"
+                    onClick={() => callAction('resume')} disabled={loading} loading={loading}>
                     Resume subscription
                   </s-button>
                 )}
