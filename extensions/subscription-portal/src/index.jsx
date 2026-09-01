@@ -82,16 +82,19 @@ function SubscriptionPortal() {
   const [contracts, setContracts] = useState(null);
   const [customerId, setCustomerId] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const [debugInfo, setDebugInfo] = useState(null);
 
   const load = useCallback(async () => {
     setLoadError(null);
     try {
       const result = await shopify.query(SUBSCRIPTIONS_QUERY);
+      setDebugInfo(JSON.stringify(result, null, 2));
       const cid = result?.data?.customer?.id ?? null;
       const edges = result?.data?.customer?.subscriptionContracts?.edges ?? [];
       setCustomerId(cid);
       setContracts(edges.map((e) => e.node));
-    } catch {
+    } catch (err) {
+      setDebugInfo('CATCH: ' + String(err));
       setLoadError('Unable to load your subscription. Please try again later.');
     }
   }, []);
@@ -118,7 +121,12 @@ function SubscriptionPortal() {
     <s-stack spacing="loose">
       <s-heading level="1">My Subscription</s-heading>
       {visible.length === 0
-        ? <s-text tone="subdued">You have no active subscriptions.</s-text>
+        ? (
+          <s-stack spacing="base">
+            <s-text tone="subdued">You have no active subscriptions.</s-text>
+            {debugInfo && <s-text size="small">{debugInfo}</s-text>}
+          </s-stack>
+        )
         : visible.map((c) => (
           <ContractCard key={c.id} contract={c} customerId={customerId} onRefresh={load} />
         ))
