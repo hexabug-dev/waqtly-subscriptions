@@ -207,10 +207,10 @@ function ContractCard({ contract, customerId, onRefresh }) {
           </s-stack>
           {lines.map((line) => (
             <s-stack key={line.id} direction="inline" spacing="base" alignItems="center">
-              {line.image?.url && (
+              {line.variantImage?.url && (
                 <s-image
-                  src={line.image.url}
-                  alt={line.image.altText ?? line.title}
+                  src={line.variantImage.url}
+                  alt={line.variantImage.altText ?? line.title}
                   inlineSize="3rem"
                   aspectRatio="1"
                   objectFit="contain"

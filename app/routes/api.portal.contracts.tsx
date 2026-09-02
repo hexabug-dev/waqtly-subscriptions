@@ -64,7 +64,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   title
                   sellingPlanName
                   currentPrice { amount currencyCode }
-                  image { url altText }
+                  variantImage { url altText }
                   pricingPolicy {
                     cycleDiscounts {
                       afterCycle
