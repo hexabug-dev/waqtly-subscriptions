@@ -119,9 +119,9 @@ function ContractCard({ contract, customerId, onRefresh }) {
   const isPaused = contract.status === 'PAUSED';
   const isFailed = contract.status === 'FAILED';
 
-  const STATUS_TONES  = { ACTIVE: 'success', PAUSED: 'warning', FAILED: 'critical' };
-  const STATUS_LABELS = { ACTIVE: 'Active',  PAUSED: 'Paused',  FAILED: 'Payment failed' };
-  const STATUS_ICONS  = { ACTIVE: 'check-circle', PAUSED: 'clock', FAILED: 'alert-triangle' };
+  const STATUS_TONES  = { ACTIVE: 'success',      PAUSED: 'warning', FAILED: 'critical' };
+  const STATUS_LABELS = { ACTIVE: 'Active',        PAUSED: 'Paused',  FAILED: 'Payment failed' };
+  const STATUS_ICONS  = { ACTIVE: 'check-circle',  PAUSED: 'clock',   FAILED: 'alert-triangle' };
 
   const firstLine  = lines[0];
   const discounts  = firstLine?.pricingPolicy?.cycleDiscounts ?? [];
@@ -175,7 +175,7 @@ function ContractCard({ contract, customerId, onRefresh }) {
   }
 
   return (
-    <s-stack spacing="base">
+    <s-stack spacing="loose">
 
       {isPaused && (
         <s-banner tone="warning">
@@ -191,15 +191,33 @@ function ContractCard({ contract, customerId, onRefresh }) {
       {/* Devices */}
       <s-section heading="Devices">
         <s-stack spacing="base">
-          <s-badge
-            tone={STATUS_TONES[contract.status] ?? 'neutral'}
-            icon={STATUS_ICONS[contract.status]}>
-            {STATUS_LABELS[contract.status] ?? contract.status}
-          </s-badge>
+          {/* Status indicator — s-icon + s-text support success/warning/critical tones in this surface */}
+          <s-stack direction="inline" spacing="tight" alignItems="center">
+            <s-icon
+              type={STATUS_ICONS[contract.status] ?? 'circle'}
+              tone={STATUS_TONES[contract.status] ?? 'neutral'}
+              size="small"
+            />
+            <s-text tone={STATUS_TONES[contract.status] ?? 'auto'} emphasis="bold">
+              {STATUS_LABELS[contract.status] ?? contract.status}
+            </s-text>
+          </s-stack>
           {lines.map((line) => (
-            <s-stack key={line.id} spacing="none">
-              <s-text emphasis="bold">{line.title}</s-text>
-              <s-text size="small" tone="subdued">{line.sellingPlanName ?? ''}</s-text>
+            <s-stack key={line.id} direction="inline" spacing="base" alignItems="center">
+              {line.image?.url && (
+                <s-image
+                  src={line.image.url}
+                  alt={line.image.altText ?? line.title}
+                  inlineSize="3rem"
+                  aspectRatio="1"
+                  objectFit="contain"
+                  borderRadius="base"
+                />
+              )}
+              <s-stack spacing="none">
+                <s-text emphasis="bold">{line.title}</s-text>
+                <s-text size="small" tone="subdued">{line.sellingPlanName ?? ''}</s-text>
+              </s-stack>
             </s-stack>
           ))}
         </s-stack>
@@ -209,17 +227,20 @@ function ContractCard({ contract, customerId, onRefresh }) {
       <s-section heading="Billing timeline">
         <s-stack spacing="base">
           {originPrice && (
-            <s-stack direction="inline" spacing="base">
+            <s-stack direction="inline" spacing="base" alignItems="center">
               <s-text size="small">
                 Entry payment{startDate ? ` — ${startDate}` : ''} · {money(originPrice.amount, originPrice.currencyCode)}
               </s-text>
-              <s-badge tone="success" icon="check-circle">Paid</s-badge>
+              <s-stack direction="inline" spacing="tight" alignItems="center">
+                <s-icon type="check-circle" tone="success" size="small" />
+                <s-text size="small" tone="success" emphasis="bold">Paid</s-text>
+              </s-stack>
             </s-stack>
           )}
           {freeMonths > 0 && (
-            <s-stack direction="inline" spacing="base">
+            <s-stack direction="inline" spacing="base" alignItems="center">
               <s-text size="small">Months 1–{freeMonths} · No charge</s-text>
-              <s-badge tone="info">Free period</s-badge>
+              <s-badge tone="neutral">Free period</s-badge>
             </s-stack>
           )}
           {lines.map((line) => {
@@ -229,11 +250,16 @@ function ContractCard({ contract, customerId, onRefresh }) {
               ? `From ${nextDate}`
               : freeMonths > 0 ? `Month ${freeMonths + 1} onwards` : 'Recurring';
             return (
-              <s-stack key={line.id} direction="inline" spacing="base">
+              <s-stack key={line.id} direction="inline" spacing="base" alignItems="center">
                 <s-text size="small">{line.title} — {when} · {amt}/mo</s-text>
-                <s-badge tone={isPaused ? 'warning' : 'info'} icon={isPaused ? 'clock' : 'calendar'}>
-                  {isPaused ? 'Paused' : 'Upcoming'}
-                </s-badge>
+                {isPaused ? (
+                  <s-stack direction="inline" spacing="tight" alignItems="center">
+                    <s-icon type="clock" tone="warning" size="small" />
+                    <s-text size="small" tone="warning" emphasis="bold">Paused</s-text>
+                  </s-stack>
+                ) : (
+                  <s-badge tone="neutral" icon="calendar">Upcoming</s-badge>
+                )}
               </s-stack>
             );
           })}
