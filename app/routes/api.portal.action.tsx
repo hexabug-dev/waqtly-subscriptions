@@ -30,20 +30,50 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
-  let body: { action?: string; contractId?: string; customerId?: string };
+  let body: { action?: string; contractId?: string; customerId?: string; paymentMethodId?: string };
   try {
     body = await request.json();
   } catch {
     return json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders() });
   }
 
-  const { action: act, contractId, customerId } = body;
+  const { action: act, contractId, customerId, paymentMethodId } = body;
 
-  if (!act || !contractId || !customerId) {
-    return json({ error: "action, contractId, and customerId are required" }, { status: 400, headers: corsHeaders() });
+  if (!act || !customerId) {
+    return json({ error: "action and customerId are required" }, { status: 400, headers: corsHeaders() });
   }
-  if (act !== "pause" && act !== "resume") {
-    return json({ error: "action must be pause or resume" }, { status: 400, headers: corsHeaders() });
+  if (act !== "pause" && act !== "resume" && act !== "send-update-email") {
+    return json({ error: "action must be pause, resume, or send-update-email" }, { status: 400, headers: corsHeaders() });
+  }
+
+  if (act === "send-update-email") {
+    if (!paymentMethodId) {
+      return json({ error: "paymentMethodId is required" }, { status: 400, headers: corsHeaders() });
+    }
+    try {
+      const result = await adminGQL(
+        `mutation($id: ID!) {
+          customerPaymentMethodSendUpdateEmail(customerPaymentMethodId: $id) {
+            customer { id }
+            userErrors { field message }
+          }
+        }`,
+        { id: paymentMethodId }
+      );
+      const errors = result?.data?.customerPaymentMethodSendUpdateEmail?.userErrors ?? [];
+      if (errors.length) {
+        return json({ error: errors.map((e: { message: string }) => e.message).join(", ") }, { status: 500, headers: corsHeaders() });
+      }
+      return json({ success: true, emailSent: true }, { headers: corsHeaders() });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[portal/action] send-update-email", msg);
+      return json({ error: "Internal server error" }, { status: 500, headers: corsHeaders() });
+    }
+  }
+
+  if (!contractId) {
+    return json({ error: "contractId is required" }, { status: 400, headers: corsHeaders() });
   }
 
   const customerGid = customerId.startsWith("gid://")

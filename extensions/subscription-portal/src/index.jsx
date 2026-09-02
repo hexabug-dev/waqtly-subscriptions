@@ -108,6 +108,8 @@ function ContractCard({ contract, customerId, onRefresh }) {
   const [pauseOpen, setPauseOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
 
   const lines = contract.lines?.nodes ?? contract.lines?.edges?.map((e) => e.node) ?? [];
   const pm = contract.customerPaymentMethod;
@@ -128,6 +130,27 @@ function ContractCard({ contract, customerId, onRefresh }) {
   const originPrice = contract.originOrder?.totalPriceSet?.shopMoney;
   const startDate  = fmtDate(contract.createdAt);
   const nextDate   = fmtDate(contract.nextBillingDate);
+
+  async function sendUpdateEmail() {
+    setEmailLoading(true);
+    setActionError(null);
+    try {
+      const r = await fetch(`${APP_URL}/api/portal/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send-update-email', paymentMethodId: pm?.id, customerId }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error || 'Request failed');
+      }
+      setEmailSent(true);
+    } catch {
+      setActionError('Unable to send payment update email. Contact support@waqtly.com.');
+    } finally {
+      setEmailLoading(false);
+    }
+  }
 
   async function callAction(act) {
     setLoading(true);
@@ -234,8 +257,12 @@ function ContractCard({ contract, customerId, onRefresh }) {
                     ? ` — Expires ${pmCard.expiryMonth}/${String(pmCard.expiryYear).slice(-2)}`
                     : ''}
                 </s-text>
-                {updateUrl && (
-                  <s-button variant="secondary" href={updateUrl}>Update</s-button>
+                {emailSent ? (
+                  <s-text size="small" tone="success">Update link sent — check your email.</s-text>
+                ) : (
+                  <s-button variant="secondary" onClick={sendUpdateEmail} disabled={emailLoading} loading={emailLoading}>
+                    Update payment method
+                  </s-button>
                 )}
               </s-stack>
             </s-box>
@@ -283,8 +310,14 @@ function ContractCard({ contract, customerId, onRefresh }) {
                     Resume subscription
                   </s-button>
                 )}
-                {isFailed && updateUrl && (
-                  <s-button variant="primary" href={updateUrl}>Update payment method</s-button>
+                {isFailed && (
+                  emailSent ? (
+                    <s-text size="small" tone="success">Update link sent — check your email.</s-text>
+                  ) : (
+                    <s-button variant="primary" onClick={sendUpdateEmail} disabled={emailLoading} loading={emailLoading}>
+                      Update payment method
+                    </s-button>
+                  )
                 )}
               </s-stack>
             )}
