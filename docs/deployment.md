@@ -81,7 +81,7 @@ Both use `unauthenticated.admin(SHOP)` with the Prisma session store. Ownership 
 
 ## Webhooks
 
-All 9 are app-registered (Waqtly Subscriptions app), signed with the app client secret, pointing to `/webhooks/subscription-contracts`.
+All 9 are app-registered (Waqtly Subscriptions app), signed with the app client secret, pointing to `/webhooks/subscription-contracts`. All 9 webhooks are now active (DISPUTES_CREATE previously blocked on Shopify Payments scope — resolved).
 
 Handler: `app/routes/webhooks.subscription-contracts.tsx` — verifies HMAC, routes by topic, returns 200.
 
@@ -105,9 +105,14 @@ Handler: `app/routes/webhooks.subscription-contracts.tsx` — verifies HMAC, rou
 
 ## Pending Work
 
-- [ ] Webhook handler business logic per topic (CRM notification, entitlement update, dunning)
+- [ ] Webhook handler business logic:
+  - `subscription_contracts/update` — update CRM entitlement state on cancel/expire (downgrade trigger)
+  - `subscription_billing_attempts/success` — extend CRM entitlement past trial (only event that does this)
+  - `subscription_billing_attempts/challenged` — hold in challenged state, do not downgrade (EU SCA)
+  - `subscription_contracts/create` — notify CRM to register device
 - [ ] Billing scheduler cron job — reads activation dates from CRM; charges `subscriptionBillingAttemptCreate` at month 7 from activation (not from purchase date), then monthly until paused/cancelled
 - [ ] CRM integration — `/api/activate` called on `subscription_contracts/create` webhook to register device and record activation date; activation date is the reference point for all billing timing
 - [x] Payment method update flow — portal button + webhook auto-trigger via `CustomerPaymentMethodSendUpdateEmail`
+- [x] DISPUTES_CREATE webhook — active after Shopify Payments scope resolved
 - [ ] `ApiVersion.January25` mismatch in `app/shopify.server.ts` — update to `October25`
 - [ ] Dev store (`waqtly-dev.myshopify.com`) full testing

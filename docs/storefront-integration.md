@@ -236,7 +236,25 @@ These IDs are needed if rendering the purchase option selector manually in a hea
 
 | Product | Selling Plan ID (GID) | Numeric ID |
 |---|---|---|
-| Waqtly Plus • 13.5 inch | `gid://shopify/SellingPlan/691771572547` | `691771572547` |
-| Waqtly Nano • 10.1 inch | `gid://shopify/SellingPlan/691771605315` | `691771605315` |
+| Waqtly Plus • 13.5 inch | `gid://shopify/SellingPlan/691771998531` | `691771998531` |
+| Waqtly Nano • 10.1 inch | `gid://shopify/SellingPlan/691772031299` | `691772031299` |
 
 For standard Liquid themes these IDs are exposed automatically via `product.selling_plan_groups` and do not need to be hardcoded.
+
+---
+
+## Selling plan pricing configuration
+
+Both subscription selling plans use a `FIXED_AMOUNT` discount on the fixed pricing policy (not a `PRICE` override), because Shopify's update API requires this format. The effective checkout prices are derived from the variant prices:
+
+| Product | Variant price | Fixed discount | Checkout price | Recurring (app-billed, month 7+) |
+|---|---|---|---|---|
+| Waqtly Plus | €289.00 | €150.00 | **€139.00** | €7.99/mo |
+| Waqtly Nano | €229.00 | €130.00 | **€99.00** | €7.99/mo |
+
+**Important — updating selling plans via Admin GraphQL:**  
+`sellingPlanGroupUpdate` with `sellingPlansToUpdate` treats every unspecified field as "clear." Always include BOTH `name` AND `pricingPolicies` in a single update, never just one of them, or the other field will be wiped.
+
+The pricing policies must contain one `fixed` entry and one `recurring` entry. Use `adjustmentType: PRICE` on the `fixed` entry (sets the absolute checkout price). `FIXED_AMOUNT` on the fixed entry displays the discount amount instead of the final price in Liquid — avoid it.
+
+To recreate a selling plan from scratch (e.g. to restore wiped policies), use `sellingPlansToCreate` + `sellingPlansToDelete` in one atomic `sellingPlanGroupUpdate` call. Include `category: SUBSCRIPTION` and `afterCycle` on every `recurring` pricing policy — both are required.
