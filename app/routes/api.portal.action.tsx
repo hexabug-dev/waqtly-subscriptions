@@ -1,9 +1,8 @@
 import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { unauthenticated } from "../shopify.server";
 
-const SHOP    = process.env.SHOPIFY_STORE_DOMAIN ?? "bpb1ru-85.myshopify.com";
-const TOKEN   = process.env.SHOPIFY_ACCESS_TOKEN ?? "";
-const GQL_URL = `https://${SHOP}/admin/api/2025-10/graphql.json`;
+const SHOP = process.env.SHOPIFY_STORE_DOMAIN ?? "waqtly.myshopify.com";
 
 function corsHeaders() {
   return {
@@ -14,16 +13,9 @@ function corsHeaders() {
 }
 
 async function adminGQL(query: string, variables?: Record<string, unknown>) {
-  const res = await fetch(GQL_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": TOKEN,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) throw new Error(`Shopify API ${res.status}`);
-  return res.json();
+  const { admin } = await unauthenticated.admin(SHOP);
+  const response = await admin.graphql(query, { variables });
+  return response.json();
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -126,6 +118,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[portal/action]", msg);
-    return json({ error: "Internal server error", detail: msg }, { status: 500, headers: corsHeaders() });
+    return json({ error: "Internal server error" }, { status: 500, headers: corsHeaders() });
   }
 };

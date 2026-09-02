@@ -69,7 +69,7 @@ function SubscriptionPortal({ customerId }) {
       const { contracts: data } = await resp.json();
       setContracts(data ?? []);
     } catch (err) {
-      setLoadError(`${err.constructor?.name || 'Error'}: ${err.message || String(err)}`);
+      setLoadError('Unable to load your subscription. Please try again or contact support@waqtly.com.');
     }
   }, [customerId]);
 
@@ -125,7 +125,7 @@ function ContractCard({ contract, customerId, onRefresh }) {
   const discounts  = firstLine?.pricingPolicy?.cycleDiscounts ?? [];
   const firstPaid  = discounts.find((d) => parseFloat(d.computedPrice?.amount ?? '0') > 0);
   const freeMonths = firstPaid?.afterCycle ?? 0;
-  const originPrice = contract.originOrder?.totalPrice;
+  const originPrice = contract.originOrder?.totalPriceSet?.shopMoney;
   const startDate  = fmtDate(contract.createdAt);
   const nextDate   = fmtDate(contract.nextBillingDate);
 
@@ -169,17 +169,17 @@ function ContractCard({ contract, customerId, onRefresh }) {
 
         <s-box padding="base">
           <s-stack spacing="tight">
-            <s-text size="small" tone="subdued" emphasis="bold">DEVICES</s-text>
+            <s-stack direction="inline" spacing="base">
+              <s-text size="small" tone="subdued" emphasis="bold">DEVICES</s-text>
+              <s-badge tone={STATUS_TONES[contract.status] ?? 'info'}>
+                {STATUS_LABELS[contract.status] ?? contract.status}
+              </s-badge>
+            </s-stack>
             {lines.map((line) => (
-              <s-columns key={line.id} columns="1fr auto" alignY="center" spacing="base">
-                <s-stack spacing="none">
-                  <s-text emphasis="bold">{line.title}</s-text>
-                  <s-text size="small" tone="subdued">{line.sellingPlanName ?? ''}</s-text>
-                </s-stack>
-                <s-badge tone={STATUS_TONES[contract.status] ?? 'info'}>
-                  {STATUS_LABELS[contract.status] ?? contract.status}
-                </s-badge>
-              </s-columns>
+              <s-stack key={line.id} spacing="none">
+                <s-text emphasis="bold">{line.title}</s-text>
+                <s-text size="small" tone="subdued">{line.sellingPlanName ?? ''}</s-text>
+              </s-stack>
             ))}
           </s-stack>
         </s-box>
@@ -191,19 +191,17 @@ function ContractCard({ contract, customerId, onRefresh }) {
             <s-text size="small" tone="subdued" emphasis="bold">BILLING TIMELINE</s-text>
 
             {originPrice && (
-              <s-columns columns="1fr auto auto" alignY="center" spacing="base">
-                <s-text size="small">Entry payment{startDate ? ` — ${startDate}` : ''}</s-text>
-                <s-text size="small" emphasis="bold">{money(originPrice.amount, originPrice.currencyCode)}</s-text>
+              <s-stack direction="inline" spacing="base">
+                <s-text size="small">Entry payment{startDate ? ` — ${startDate}` : ''} · {money(originPrice.amount, originPrice.currencyCode)}</s-text>
                 <s-badge tone="success">Paid</s-badge>
-              </s-columns>
+              </s-stack>
             )}
 
             {freeMonths > 0 && (
-              <s-columns columns="1fr auto auto" alignY="center" spacing="base">
-                <s-text size="small">Months 1–{freeMonths}</s-text>
-                <s-text size="small" emphasis="bold">No charge</s-text>
+              <s-stack direction="inline" spacing="base">
+                <s-text size="small">Months 1–{freeMonths} · No charge</s-text>
                 <s-badge tone="info">Free period</s-badge>
-              </s-columns>
+              </s-stack>
             )}
 
             {lines.map((line) => {
@@ -213,13 +211,12 @@ function ContractCard({ contract, customerId, onRefresh }) {
                 ? `From ${nextDate}`
                 : freeMonths > 0 ? `Month ${freeMonths + 1} onwards` : 'Recurring';
               return (
-                <s-columns key={line.id} columns="1fr auto auto" alignY="center" spacing="base">
-                  <s-text size="small">{line.title} — {when}</s-text>
-                  <s-text size="small" emphasis="bold">{amt} / mo</s-text>
+                <s-stack key={line.id} direction="inline" spacing="base">
+                  <s-text size="small">{line.title} — {when} · {amt}/mo</s-text>
                   <s-badge tone={isPaused ? 'warning' : 'info'}>
                     {isPaused ? 'Paused' : 'Upcoming'}
                   </s-badge>
-                </s-columns>
+                </s-stack>
               );
             })}
           </s-stack>
@@ -231,17 +228,15 @@ function ContractCard({ contract, customerId, onRefresh }) {
             <s-box padding="base">
               <s-stack spacing="tight">
                 <s-text size="small" tone="subdued" emphasis="bold">PAYMENT METHOD</s-text>
-                <s-columns columns="1fr auto" alignY="center" spacing="base">
-                  <s-text>
-                    {cap(pmCard.brand ?? 'Card')} ending {pmCard.lastDigits}
-                    {pmCard.expiryMonth && pmCard.expiryYear
-                      ? ` — Expires ${pmCard.expiryMonth}/${String(pmCard.expiryYear).slice(-2)}`
-                      : ''}
-                  </s-text>
-                  {updateUrl && (
-                    <s-button variant="secondary" href={updateUrl}>Update</s-button>
-                  )}
-                </s-columns>
+                <s-text>
+                  {cap(pmCard.brand ?? 'Card')} ending {pmCard.lastDigits}
+                  {pmCard.expiryMonth && pmCard.expiryYear
+                    ? ` — Expires ${pmCard.expiryMonth}/${String(pmCard.expiryYear).slice(-2)}`
+                    : ''}
+                </s-text>
+                {updateUrl && (
+                  <s-button variant="secondary" href={updateUrl}>Update</s-button>
+                )}
               </s-stack>
             </s-box>
           </>

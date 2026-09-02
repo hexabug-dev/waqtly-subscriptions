@@ -1,9 +1,8 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
+import { unauthenticated } from "../shopify.server";
 
-const SHOP   = process.env.SHOPIFY_STORE_DOMAIN ?? "bpb1ru-85.myshopify.com";
-const TOKEN  = process.env.SHOPIFY_ACCESS_TOKEN ?? "";
-const GQL_URL = `https://${SHOP}/admin/api/2025-10/graphql.json`;
+const SHOP = process.env.SHOPIFY_STORE_DOMAIN ?? "waqtly.myshopify.com";
 
 function corsHeaders() {
   return {
@@ -14,16 +13,9 @@ function corsHeaders() {
 }
 
 async function adminGQL(query: string, variables?: Record<string, unknown>) {
-  const res = await fetch(GQL_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": TOKEN,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) throw new Error(`Shopify API ${res.status}`);
-  return res.json();
+  const { admin } = await unauthenticated.admin(SHOP);
+  const response = await admin.graphql(query, { variables });
+  return response.json();
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -53,11 +45,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               createdAt
               nextBillingDate
               originOrder {
-                totalPrice { amount currencyCode }
+                totalPriceSet { shopMoney { amount currencyCode } }
               }
               customerPaymentMethod {
                 id
-                instrumentUpdateUrl
                 instrument {
                   ... on CustomerCreditCard {
                     brand
@@ -93,6 +84,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[portal/contracts]", msg);
-    return json({ error: "Failed to fetch contracts", detail: msg }, { status: 500, headers: corsHeaders() });
+    return json({ error: "Failed to fetch contracts" }, { status: 500, headers: corsHeaders() });
   }
 };
