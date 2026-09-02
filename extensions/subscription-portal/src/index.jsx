@@ -114,7 +114,6 @@ function ContractCard({ contract, customerId, onRefresh }) {
   const lines = contract.lines?.nodes ?? contract.lines?.edges?.map((e) => e.node) ?? [];
   const pm = contract.customerPaymentMethod;
   const pmCard = pm?.instrument;
-  const updateUrl = pm?.instrumentUpdateUrl;
 
   const isActive = contract.status === 'ACTIVE';
   const isPaused = contract.status === 'PAUSED';
@@ -122,6 +121,7 @@ function ContractCard({ contract, customerId, onRefresh }) {
 
   const STATUS_TONES  = { ACTIVE: 'success', PAUSED: 'warning', FAILED: 'critical' };
   const STATUS_LABELS = { ACTIVE: 'Active',  PAUSED: 'Paused',  FAILED: 'Payment failed' };
+  const STATUS_ICONS  = { ACTIVE: 'check-circle', PAUSED: 'clock', FAILED: 'alert-triangle' };
 
   const firstLine  = lines[0];
   const discounts  = firstLine?.pricingPolicy?.cycleDiscounts ?? [];
@@ -188,143 +188,140 @@ function ContractCard({ contract, customerId, onRefresh }) {
         </s-banner>
       )}
 
-      <s-box background="base" padding="none" border="base">
-
-        <s-box padding="base">
-          <s-stack spacing="tight">
-            <s-stack direction="inline" spacing="base">
-              <s-text size="small" tone="subdued" emphasis="bold">DEVICES</s-text>
-              <s-badge tone={STATUS_TONES[contract.status] ?? 'info'}>
-                {STATUS_LABELS[contract.status] ?? contract.status}
-              </s-badge>
+      {/* Devices */}
+      <s-section heading="Devices">
+        <s-badge slot="primary-action"
+          tone={STATUS_TONES[contract.status] ?? 'neutral'}
+          icon={STATUS_ICONS[contract.status]}>
+          {STATUS_LABELS[contract.status] ?? contract.status}
+        </s-badge>
+        <s-stack spacing="tight">
+          {lines.map((line) => (
+            <s-stack key={line.id} spacing="none">
+              <s-text emphasis="bold">{line.title}</s-text>
+              <s-text size="small" tone="subdued">{line.sellingPlanName ?? ''}</s-text>
             </s-stack>
-            {lines.map((line) => (
-              <s-stack key={line.id} spacing="none">
-                <s-text emphasis="bold">{line.title}</s-text>
-                <s-text size="small" tone="subdued">{line.sellingPlanName ?? ''}</s-text>
+          ))}
+        </s-stack>
+      </s-section>
+
+      {/* Billing timeline */}
+      <s-section heading="Billing timeline">
+        <s-stack spacing="tight">
+          {originPrice && (
+            <s-stack direction="inline" spacing="base">
+              <s-text size="small">
+                Entry payment{startDate ? ` — ${startDate}` : ''} · {money(originPrice.amount, originPrice.currencyCode)}
+              </s-text>
+              <s-badge tone="success" icon="check-circle">Paid</s-badge>
+            </s-stack>
+          )}
+          {freeMonths > 0 && (
+            <s-stack direction="inline" spacing="base">
+              <s-text size="small">Months 1–{freeMonths} · No charge</s-text>
+              <s-badge tone="info">Free period</s-badge>
+            </s-stack>
+          )}
+          {lines.map((line) => {
+            if (!line.currentPrice) return null;
+            const amt = money(line.currentPrice.amount, line.currentPrice.currencyCode);
+            const when = nextDate
+              ? `From ${nextDate}`
+              : freeMonths > 0 ? `Month ${freeMonths + 1} onwards` : 'Recurring';
+            return (
+              <s-stack key={line.id} direction="inline" spacing="base">
+                <s-text size="small">{line.title} — {when} · {amt}/mo</s-text>
+                <s-badge tone={isPaused ? 'warning' : 'info'} icon={isPaused ? 'clock' : 'calendar'}>
+                  {isPaused ? 'Paused' : 'Upcoming'}
+                </s-badge>
               </s-stack>
-            ))}
-          </s-stack>
-        </s-box>
+            );
+          })}
+        </s-stack>
+      </s-section>
 
-        <s-divider />
-
-        <s-box padding="base">
-          <s-stack spacing="tight">
-            <s-text size="small" tone="subdued" emphasis="bold">BILLING TIMELINE</s-text>
-
-            {originPrice && (
-              <s-stack direction="inline" spacing="base">
-                <s-text size="small">Entry payment{startDate ? ` — ${startDate}` : ''} · {money(originPrice.amount, originPrice.currencyCode)}</s-text>
-                <s-badge tone="success">Paid</s-badge>
-              </s-stack>
-            )}
-
-            {freeMonths > 0 && (
-              <s-stack direction="inline" spacing="base">
-                <s-text size="small">Months 1–{freeMonths} · No charge</s-text>
-                <s-badge tone="info">Free period</s-badge>
-              </s-stack>
-            )}
-
-            {lines.map((line) => {
-              if (!line.currentPrice) return null;
-              const amt = money(line.currentPrice.amount, line.currentPrice.currencyCode);
-              const when = nextDate
-                ? `From ${nextDate}`
-                : freeMonths > 0 ? `Month ${freeMonths + 1} onwards` : 'Recurring';
-              return (
-                <s-stack key={line.id} direction="inline" spacing="base">
-                  <s-text size="small">{line.title} — {when} · {amt}/mo</s-text>
-                  <s-badge tone={isPaused ? 'warning' : 'info'}>
-                    {isPaused ? 'Paused' : 'Upcoming'}
-                  </s-badge>
-                </s-stack>
-              );
-            })}
-          </s-stack>
-        </s-box>
-
-        {pmCard && (
-          <>
-            <s-divider />
-            <s-box padding="base">
-              <s-stack spacing="tight">
-                <s-text size="small" tone="subdued" emphasis="bold">PAYMENT METHOD</s-text>
-                <s-text>
+      {/* Payment method */}
+      {pmCard && (
+        <s-section heading="Payment method">
+          {emailSent ? (
+            <s-stack direction="inline" spacing="tight">
+              <s-icon type="check-circle" tone="success" size="small" />
+              <s-text size="small" tone="success">Update link sent — check your email.</s-text>
+            </s-stack>
+          ) : (
+            <s-grid gridTemplateColumns="1fr auto" alignItems="center" gap="base">
+              <s-stack spacing="none">
+                <s-text emphasis="bold">
                   {cap(pmCard.brand ?? 'Card')} ending {pmCard.lastDigits}
-                  {pmCard.expiryMonth && pmCard.expiryYear
-                    ? ` — Expires ${pmCard.expiryMonth}/${String(pmCard.expiryYear).slice(-2)}`
-                    : ''}
                 </s-text>
-                {emailSent ? (
-                  <s-text size="small" tone="success">Update link sent — check your email.</s-text>
-                ) : (
-                  <s-button variant="secondary" onClick={sendUpdateEmail} disabled={emailLoading} loading={emailLoading}>
-                    Update payment method
-                  </s-button>
+                {pmCard.expiryMonth && pmCard.expiryYear && (
+                  <s-text size="small" tone="subdued">
+                    Expires {pmCard.expiryMonth}/{String(pmCard.expiryYear).slice(-2)}
+                  </s-text>
                 )}
               </s-stack>
-            </s-box>
-          </>
-        )}
+              <s-button variant="secondary" onClick={sendUpdateEmail} disabled={emailLoading} loading={emailLoading}>
+                Update
+              </s-button>
+            </s-grid>
+          )}
+        </s-section>
+      )}
 
-        <s-divider />
-        <s-box padding="base">
+      {/* Actions */}
+      {actionError && (
+        <s-banner tone="critical"><s-text>{actionError}</s-text></s-banner>
+      )}
+
+      {isActive && pauseOpen ? (
+        <s-banner tone="warning">
           <s-stack spacing="base">
-            {actionError && (
-              <s-banner tone="critical"><s-text>{actionError}</s-text></s-banner>
-            )}
-
-            {isActive && pauseOpen ? (
-              <s-banner tone="warning">
-                <s-stack spacing="base">
-                  <s-stack spacing="none">
-                    <s-text emphasis="bold">Pause your subscription?</s-text>
-                    <s-text size="small">Waqtly features on your tablet will be restricted until you resume.</s-text>
-                  </s-stack>
-                  <s-stack direction="inline" spacing="tight">
-                    <s-button variant="primary" tone="critical"
-                      onClick={() => callAction('pause')} disabled={loading} loading={loading}>
-                      Yes, pause
-                    </s-button>
-                    <s-button variant="secondary"
-                      onClick={() => setPauseOpen(false)} disabled={loading}>
-                      Keep active
-                    </s-button>
-                  </s-stack>
-                </s-stack>
-              </s-banner>
-            ) : (
-              <s-stack direction="inline" spacing="tight">
-                {isActive && (
-                  <s-button variant="secondary" tone="critical"
-                    onClick={() => { setActionError(null); setPauseOpen(true); }}
-                    disabled={loading}>
-                    Pause subscription
-                  </s-button>
-                )}
-                {isPaused && (
-                  <s-button variant="primary"
-                    onClick={() => callAction('resume')} disabled={loading} loading={loading}>
-                    Resume subscription
-                  </s-button>
-                )}
-                {isFailed && (
-                  emailSent ? (
-                    <s-text size="small" tone="success">Update link sent — check your email.</s-text>
-                  ) : (
-                    <s-button variant="primary" onClick={sendUpdateEmail} disabled={emailLoading} loading={emailLoading}>
-                      Update payment method
-                    </s-button>
-                  )
-                )}
-              </s-stack>
-            )}
+            <s-stack spacing="none">
+              <s-text emphasis="bold">Pause your subscription?</s-text>
+              <s-text size="small">Waqtly features on your tablet will be restricted until you resume.</s-text>
+            </s-stack>
+            <s-stack direction="inline" spacing="tight">
+              <s-button variant="primary" tone="critical"
+                onClick={() => callAction('pause')} disabled={loading} loading={loading}>
+                Yes, pause
+              </s-button>
+              <s-button variant="secondary"
+                onClick={() => setPauseOpen(false)} disabled={loading}>
+                Keep active
+              </s-button>
+            </s-stack>
           </s-stack>
-        </s-box>
+        </s-banner>
+      ) : (
+        <s-stack direction="inline" spacing="tight">
+          {isActive && (
+            <s-button variant="secondary" tone="critical"
+              onClick={() => { setActionError(null); setPauseOpen(true); }}
+              disabled={loading}>
+              Pause subscription
+            </s-button>
+          )}
+          {isPaused && (
+            <s-button variant="primary"
+              onClick={() => callAction('resume')} disabled={loading} loading={loading}>
+              Resume subscription
+            </s-button>
+          )}
+          {isFailed && (
+            emailSent ? (
+              <s-stack direction="inline" spacing="tight">
+                <s-icon type="check-circle" tone="success" size="small" />
+                <s-text size="small" tone="success">Update link sent — check your email.</s-text>
+              </s-stack>
+            ) : (
+              <s-button variant="primary" onClick={sendUpdateEmail} disabled={emailLoading} loading={emailLoading}>
+                Update payment method
+              </s-button>
+            )
+          )}
+        </s-stack>
+      )}
 
-      </s-box>
     </s-stack>
   );
 }
