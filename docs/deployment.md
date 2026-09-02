@@ -83,7 +83,13 @@ Both use `unauthenticated.admin(SHOP)` with the Prisma session store. Ownership 
 
 All 9 are app-registered (Waqtly Subscriptions app), signed with the app client secret, pointing to `/webhooks/subscription-contracts`.
 
-Handler: `app/routes/webhooks.subscription-contracts.tsx` — verifies HMAC, logs payload, returns 200. Business logic per topic is pending.
+Handler: `app/routes/webhooks.subscription-contracts.tsx` — verifies HMAC, routes by topic, returns 200.
+
+| Topic | Handler |
+|---|---|
+| `subscription_billing_attempts/failure` | Sends `customerPaymentMethodSendUpdateEmail` |
+| `customer_payment_methods/revoke` | Sends `customerPaymentMethodSendUpdateEmail` |
+| All others | Logs payload — handler pending |
 
 | Topic | Shopify ID |
 |---|---|
@@ -102,6 +108,6 @@ Handler: `app/routes/webhooks.subscription-contracts.tsx` — verifies HMAC, log
 - [ ] Webhook handler business logic per topic (CRM notification, entitlement update, dunning)
 - [ ] Billing scheduler cron job — `subscriptionBillingAttemptCreate` at month 7
 - [ ] CRM integration — `/api/activate` for device activation on contract create
-- [ ] Payment method update flow — `CustomerPaymentMethodSendUpdateEmail` mutation
+- [x] Payment method update flow — portal button + webhook auto-trigger via `CustomerPaymentMethodSendUpdateEmail`
 - [ ] `ApiVersion.January25` mismatch in `app/shopify.server.ts` — update to `October25`
 - [ ] Dev store (`waqtly-dev.myshopify.com`) full testing
