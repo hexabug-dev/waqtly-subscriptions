@@ -10,7 +10,7 @@ For designers and developers building or redesigning the Waqtly online store. Co
 
 Waqtly has two tablet products that carry a subscription. They are the only products in the store with a selling plan attached:
 
-| Product | Handle | Entry payment | Monthly (from month 2) |
+| Product | Handle | Entry payment | Monthly (from month 7 after activation) |
 |---|---|---|---|
 | **Waqtly Plus** • 13.5 inch | `/products/waqtlyplus` | €139.00 | €7.99 |
 | **Waqtly Nano** • 10.1 inch | `/products/waqtlynano` | €99.00 | €7.99 |
@@ -32,14 +32,20 @@ At checkout:
 
 The Waqtly Subscriptions app receives a `subscription_contracts/create` webhook the moment the contract is created. This is the trigger for any downstream actions (device activation, CRM notification — see deployment doc).
 
-The customer does not need to do anything else. The recurring billing is handled automatically from this point.
+The customer does not need to do anything else. The recurring billing is handled automatically — but the timing is controlled by the activation date, not the purchase date.
 
-### 3. Monthly billing happens automatically
+### 3. The tablet is activated — this starts the free period clock
 
-From month 2 onward, the Waqtly Subscriptions app's billing scheduler calls Shopify's `subscriptionBillingAttemptCreate` each month. Shopify charges the vaulted card €7.99 and records a new billing attempt against the contract.
+When the customer receives their device and turns it on, the Waqtly CRM records an **activation date** for that customer. This is the event that starts counting.
 
-If the charge succeeds, the subscription stays active.  
-If the charge fails, Shopify fires a `subscription_billing_attempts/failure` webhook — the app catches this and automatically emails the customer a secure Shopify-managed link to update their card.
+- **Months 1–6 from activation:** No charge. The subscription is live and the device is fully functional, but no billing occurs.
+- **Month 7 from activation onwards:** €7.99 per month, charged on the same day-of-month as the activation date, every month until the subscription is paused or cancelled.
+
+The billing scheduler in the Waqtly Subscriptions app is responsible for this. Each month it checks the CRM for activation dates, calculates whether a customer has reached month 7, and calls Shopify's `subscriptionBillingAttemptCreate` on the right date. The selling plan's `afterCycle` value defines the recurring price (€7.99) — the scheduler controls when that price is actually charged.
+
+Shopify does **not** auto-bill on any schedule. The app drives all billing after the entry payment.
+
+If a charge fails, Shopify fires a `subscription_billing_attempts/failure` webhook — the app catches this and automatically emails the customer a secure Shopify-managed link to update their card.
 
 ### 4. The customer manages their subscription in their account
 
@@ -49,11 +55,54 @@ From the Subscription tab, the customer can:
 
 - See the status of their subscription (Active / Paused / Payment failed) with colour-coded indicators
 - See each device they are subscribed to, with its product thumbnail image
-- See their billing timeline — the entry payment date and amount, and the upcoming monthly charge
+- See their billing timeline — entry payment (marked Paid), free period (months 1–6 from activation), and when monthly billing begins (month 7)
 - See their saved payment method (card brand, last 4 digits, expiry)
 - Click **Update** to receive a Shopify-managed email with a secure link to change their card — no password required
 - **Pause** an active subscription (with a confirmation step)
 - **Resume** a paused subscription
+
+---
+
+## Full billing lifecycle at a glance
+
+```
+Customer checks out
+  → Shopify charges entry payment (€139 Plus / €99 Nano)
+  → Shopify vaults payment card
+  → Shopify creates SubscriptionContract
+  → app receives subscription_contracts/create webhook
+  → CRM registers the device and contract
+
+Customer receives tablet and turns it on
+  → CRM records ACTIVATION DATE ← this starts the clock
+
+Months 1–6 from activation date
+  → no billing — free period
+  → subscription status: ACTIVE
+
+Month 7 from activation date (and every month after)
+  → billing scheduler reads activation dates from CRM
+  → calls subscriptionBillingAttemptCreate on Shopify
+  → Shopify charges €7.99 via vaulted card
+  → continues monthly until PAUSED or CANCELLED
+
+If any charge fails
+  ← subscription_billing_attempts/failure webhook fires
+  → app immediately emails customer a Shopify-managed secure link to update card
+  → subscription status: FAILED until card is updated and charge retried
+
+Customer pauses (from portal or app action)
+  → app calls subscriptionDraftUpdate (status: PAUSED) + commit
+  → billing scheduler skips that customer until RESUMED
+  → subscription status: PAUSED
+
+Customer resumes
+  → app calls subscriptionDraftUpdate (status: ACTIVE) + commit
+  → billing scheduler picks them up again on next cycle
+  → subscription status: ACTIVE
+```
+
+**Key principle:** Shopify does not auto-bill after the entry payment. The Waqtly Subscriptions app's billing scheduler owns all recurring charges. The activation date from the CRM — not the purchase date — determines when billing starts.
 
 ---
 
@@ -66,10 +115,10 @@ From the Subscription tab, the customer can:
 - **Variants:** White screen + [White / Black / Oak / Walnut frame], Black screen + [White / Black / Oak / Walnut frame]
 - **Selling plan group:** Subscribe (Plus) - Entry
 - **Selling plan ID:** `gid://shopify/SellingPlan/691771572547`
-- **Billing cycle:** Monthly (`MONTH`, interval 1)
+- **Billing cycle:** Monthly (`MONTH`, interval 1) — timing driven by app scheduler, not Shopify auto-billing
 - **Pricing:**
-  - Cycle 1 (checkout): **€139.00**
-  - From cycle 2 onwards: **€7.99/month**
+  - Entry (charged at checkout): **€139.00**
+  - Recurring (months 1–6 from activation: €0 — months 7+ from activation): **€7.99/month**
 
 ### Waqtly Nano • 10.1 inch
 
@@ -78,10 +127,10 @@ From the Subscription tab, the customer can:
 - **Variants:** White screen + [White / Black / Oak / Walnut frame], Black screen + [White / Black / Oak / Walnut frame]
 - **Selling plan group:** Subscribe (Nano) - Entry
 - **Selling plan ID:** `gid://shopify/SellingPlan/691771605315`
-- **Billing cycle:** Monthly (`MONTH`, interval 1)
+- **Billing cycle:** Monthly (`MONTH`, interval 1) — timing driven by app scheduler, not Shopify auto-billing
 - **Pricing:**
-  - Cycle 1 (checkout): **€99.00**
-  - From cycle 2 onwards: **€7.99/month**
+  - Entry (charged at checkout): **€99.00**
+  - Recurring (months 1–6 from activation: €0 — months 7+ from activation): **€7.99/month**
 
 ### Non-subscription products (no selling plan)
 

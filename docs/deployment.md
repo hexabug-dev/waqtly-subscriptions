@@ -106,8 +106,8 @@ Handler: `app/routes/webhooks.subscription-contracts.tsx` — verifies HMAC, rou
 ## Pending Work
 
 - [ ] Webhook handler business logic per topic (CRM notification, entitlement update, dunning)
-- [ ] Billing scheduler cron job — `subscriptionBillingAttemptCreate` at month 7
-- [ ] CRM integration — `/api/activate` for device activation on contract create
+- [ ] Billing scheduler cron job — reads activation dates from CRM; charges `subscriptionBillingAttemptCreate` at month 7 from activation (not from purchase date), then monthly until paused/cancelled
+- [ ] CRM integration — `/api/activate` called on `subscription_contracts/create` webhook to register device and record activation date; activation date is the reference point for all billing timing
 - [x] Payment method update flow — portal button + webhook auto-trigger via `CustomerPaymentMethodSendUpdateEmail`
 - [ ] `ApiVersion.January25` mismatch in `app/shopify.server.ts` — update to `October25`
 - [ ] Dev store (`waqtly-dev.myshopify.com`) full testing
