@@ -123,13 +123,16 @@ function ContractCard({ contract, customerId, onRefresh }) {
   const STATUS_LABELS = { ACTIVE: 'Active',        PAUSED: 'Paused',  FAILED: 'Payment failed' };
   const STATUS_ICONS  = { ACTIVE: 'check-circle',  PAUSED: 'clock',   FAILED: 'alert-triangle' };
 
-  const firstLine  = lines[0];
-  const discounts  = firstLine?.pricingPolicy?.cycleDiscounts ?? [];
-  const firstPaid  = discounts.find((d) => parseFloat(d.computedPrice?.amount ?? '0') > 0);
-  const freeMonths = firstPaid?.afterCycle ?? 0;
-  const originPrice = contract.originOrder?.totalPriceSet?.shopMoney;
-  const startDate  = fmtDate(contract.createdAt);
-  const nextDate   = fmtDate(contract.nextBillingDate);
+  const originPrice    = contract.originOrder?.totalPriceSet?.shopMoney;
+  const startDate      = fmtDate(contract.createdAt);
+
+  // Billing model: months 1–6 from activation = free, month 7+ = recurring.
+  // activationDate comes from the backend once CRM integration is wired up.
+  const activationIso  = contract.activationDate ?? null;
+  const activationDate = fmtDate(activationIso);
+  const billingStartDate = activationIso
+    ? fmtDate(new Date(new Date(activationIso).setMonth(new Date(activationIso).getMonth() + 6)).toISOString())
+    : null;
 
   async function sendUpdateEmail() {
     setEmailLoading(true);
@@ -226,6 +229,8 @@ function ContractCard({ contract, customerId, onRefresh }) {
       {/* Billing timeline */}
       <s-section heading="Billing timeline">
         <s-stack spacing="base">
+
+          {/* Row 1: Entry payment */}
           {originPrice && (
             <s-stack direction="inline" spacing="base" alignItems="center">
               <s-text size="small">
@@ -237,18 +242,24 @@ function ContractCard({ contract, customerId, onRefresh }) {
               </s-stack>
             </s-stack>
           )}
-          {freeMonths > 0 && (
-            <s-stack direction="inline" spacing="base" alignItems="center">
-              <s-text size="small">Months 1–{freeMonths} · No charge</s-text>
-              <s-badge tone="neutral">Free period</s-badge>
-            </s-stack>
-          )}
+
+          {/* Row 2: Free period — always 6 months from activation */}
+          <s-stack direction="inline" spacing="base" alignItems="center">
+            <s-text size="small">
+              Months 1–6{activationDate ? ` from ${activationDate}` : ' from device activation'} · No charge
+            </s-text>
+            <s-badge tone="neutral">Free period</s-badge>
+          </s-stack>
+
+          {/* Row 3: Recurring charge per device — starts month 7 from activation */}
           {lines.map((line) => {
             if (!line.currentPrice) return null;
             const amt = money(line.currentPrice.amount, line.currentPrice.currencyCode);
-            const when = nextDate
-              ? `From ${nextDate}`
-              : freeMonths > 0 ? `Month ${freeMonths + 1} onwards` : 'Recurring';
+            const when = billingStartDate
+              ? `From ${billingStartDate}`
+              : activationDate
+                ? `Month 7 from ${activationDate}`
+                : 'Month 7 from device activation';
             return (
               <s-stack key={line.id} direction="inline" spacing="base" alignItems="center">
                 <s-text size="small">{line.title} — {when} · {amt}/mo</s-text>

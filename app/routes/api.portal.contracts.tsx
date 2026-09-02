@@ -81,6 +81,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
 
     const contracts = data?.data?.customer?.subscriptionContracts?.nodes ?? [];
+
+    // TODO (CRM integration): enrich each contract with activationDate from CRM.
+    // The portal billing timeline uses contract.activationDate to calculate:
+    //   - free period label: "Months 1–6 from <activationDate>"
+    //   - recurring start: activationDate + 6 months
+    // Without it, the portal falls back to "from device activation" as the label.
+    // Shape: contracts.map(c => ({ ...c, activationDate: crmRecord?.activatedAt ?? null }))
+
     return json({ contracts }, { headers: corsHeaders() });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
