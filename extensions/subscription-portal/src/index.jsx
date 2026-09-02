@@ -190,12 +190,12 @@ function ContractCard({ contract, customerId, onRefresh }) {
 
       {/* Devices */}
       <s-section heading="Devices">
-        <s-badge slot="primary-action"
-          tone={STATUS_TONES[contract.status] ?? 'neutral'}
-          icon={STATUS_ICONS[contract.status]}>
-          {STATUS_LABELS[contract.status] ?? contract.status}
-        </s-badge>
-        <s-stack spacing="tight">
+        <s-stack spacing="base">
+          <s-badge
+            tone={STATUS_TONES[contract.status] ?? 'neutral'}
+            icon={STATUS_ICONS[contract.status]}>
+            {STATUS_LABELS[contract.status] ?? contract.status}
+          </s-badge>
           {lines.map((line) => (
             <s-stack key={line.id} spacing="none">
               <s-text emphasis="bold">{line.title}</s-text>
@@ -207,7 +207,7 @@ function ContractCard({ contract, customerId, onRefresh }) {
 
       {/* Billing timeline */}
       <s-section heading="Billing timeline">
-        <s-stack spacing="tight">
+        <s-stack spacing="base">
           {originPrice && (
             <s-stack direction="inline" spacing="base">
               <s-text size="small">
