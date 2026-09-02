@@ -1,258 +1,193 @@
 # Waqtly Subscriptions — Storefront Integration Guide
 
-For designers and developers building or redesigning the Waqtly online store theme. Covers what the subscription system has set up, what the storefront must provide, and what is locked to Shopify's own interfaces.
+For designers and developers building or redesigning the Waqtly online store. Covers how the subscription system works end-to-end, what the two subscription products look like, what any new theme must preserve, and a recommendation on how to approach a redesign.
 
 ---
 
-## Overview
+## How it works — the full user journey
 
-Waqtly sells physical tablet devices bundled with a recurring SaaS subscription. The subscription is managed by the **Waqtly Subscriptions** private Shopify app. Three storefront surfaces interact with it:
+### 1. The customer lands on a product page
 
-| Surface | Who controls the design |
-|---|---|
-| Product page | You (theme or custom UI) |
-| Checkout | Shopify (native — not customised) |
-| Customer account — Subscription tab | The app's Customer Accounts UI extension |
+Waqtly has two tablet products that carry a subscription. They are the only products in the store with a selling plan attached:
+
+| Product | Handle | Entry payment | Monthly (from month 2) |
+|---|---|---|---|
+| **Waqtly Plus** • 13.5 inch | `/products/waqtlyplus` | €139.00 | €7.99 |
+| **Waqtly Nano** • 10.1 inch | `/products/waqtlynano` | €99.00 | €7.99 |
+
+*(Waqtly Frames and Waqtly Power Supply are one-time purchase products with no selling plan — subscription logic does not apply to them.)*
+
+Each tablet comes in multiple variants — screen colour (White or Black) and frame colour (White, Black, Oak, Walnut). Every variant is the same price; the combination controls the product image shown in the Devices section of the customer portal.
+
+The product page shows a **"Subscribe" option** — this is Shopify's native purchase option selector, driven by the selling plan attached to the product. The customer must select this option. Without it, the item goes into the cart as a one-off purchase and no subscription is created.
+
+### 2. The customer goes to checkout
+
+The customer adds the tablet to the cart and proceeds to checkout. Shopify's own checkout page handles everything from here.
+
+At checkout:
+- Shopify charges the **entry payment** immediately (€139 for Plus, €99 for Nano).
+- Shopify **captures and vaults** the customer's payment card for future use.
+- Shopify **creates a subscription contract** — a record that links the customer, their vaulted card, the product, and the selling plan.
+
+The Waqtly Subscriptions app receives a `subscription_contracts/create` webhook the moment the contract is created. This is the trigger for any downstream actions (device activation, CRM notification — see deployment doc).
+
+The customer does not need to do anything else. The recurring billing is handled automatically from this point.
+
+### 3. Monthly billing happens automatically
+
+From month 2 onward, the Waqtly Subscriptions app's billing scheduler calls Shopify's `subscriptionBillingAttemptCreate` each month. Shopify charges the vaulted card €7.99 and records a new billing attempt against the contract.
+
+If the charge succeeds, the subscription stays active.  
+If the charge fails, Shopify fires a `subscription_billing_attempts/failure` webhook — the app catches this and automatically emails the customer a secure Shopify-managed link to update their card.
+
+### 4. The customer manages their subscription in their account
+
+Logged-in customers can visit `waqtly.com/account` and navigate to the **Subscription** tab. This tab is rendered by the Waqtly Subscriptions Customer Accounts UI extension — it is not part of the theme.
+
+From the Subscription tab, the customer can:
+
+- See the status of their subscription (Active / Paused / Payment failed) with colour-coded indicators
+- See each device they are subscribed to, with its product thumbnail image
+- See their billing timeline — the entry payment date and amount, and the upcoming monthly charge
+- See their saved payment method (card brand, last 4 digits, expiry)
+- Click **Update** to receive a Shopify-managed email with a secure link to change their card — no password required
+- **Pause** an active subscription (with a confirmation step)
+- **Resume** a paused subscription
 
 ---
 
-## 1. Product Page
+## Product configuration details
 
-### How subscription products are set up
+### Waqtly Plus • 13.5 inch
 
-Each Waqtly device product has a **selling plan group** attached to it. A selling plan defines the recurring billing terms. Shopify surfaces this on the product page as a "purchase option" — the buyer must select it before adding to cart.
+- **Shopify product ID:** `gid://shopify/Product/14693478891843`
+- **URL handle:** `waqtlyplus`
+- **Variants:** White screen + [White / Black / Oak / Walnut frame], Black screen + [White / Black / Oak / Walnut frame]
+- **Selling plan group:** Subscribe (Plus) - Entry
+- **Selling plan ID:** `gid://shopify/SellingPlan/691771572547`
+- **Billing cycle:** Monthly (`MONTH`, interval 1)
+- **Pricing:**
+  - Cycle 1 (checkout): **€139.00**
+  - From cycle 2 onwards: **€7.99/month**
 
-The billing model for every Waqtly device is:
+### Waqtly Nano • 10.1 inch
 
-- **Entry payment** — paid at checkout (one-time, covers device hardware)
-- **Months 1–6** — no charge (free period)
-- **Month 7 onwards** — recurring monthly subscription
+- **Shopify product ID:** `gid://shopify/Product/14696508358979`
+- **URL handle:** `waqtlynano`
+- **Variants:** White screen + [White / Black / Oak / Walnut frame], Black screen + [White / Black / Oak / Walnut frame]
+- **Selling plan group:** Subscribe (Nano) - Entry
+- **Selling plan ID:** `gid://shopify/SellingPlan/691771605315`
+- **Billing cycle:** Monthly (`MONTH`, interval 1)
+- **Pricing:**
+  - Cycle 1 (checkout): **€99.00**
+  - From cycle 2 onwards: **€7.99/month**
 
-Both the entry amount and the monthly amount live on the selling plan's `pricingPolicy.cycleDiscounts`. The first non-zero `computedPrice` cycle indicates when regular billing begins.
+### Non-subscription products (no selling plan)
 
-### What the product page must include
+| Product | Handle | Price |
+|---|---|---|
+| Waqtly Frames | `waqtly-frames` | €35.00 |
+| Waqtly Power Supply | `waqtly-power-supply` | €29.00 |
 
-**Selling plan selector** — Shopify's standard themes (Dawn, Sense, etc.) include this natively under "Purchase options". If you are building a custom theme or headless storefront, you must render the plan selector yourself and pass `sellingPlanId` in the cart line item when adding to cart.
+These are standard one-time purchase products. The subscription system has no interaction with them.
 
-Without a `sellingPlanId` in the add-to-cart payload, Shopify treats the item as a one-time purchase — no subscription contract is created and the customer will not appear in the Subscriptions app.
+---
 
-#### Liquid (standard theme)
+## The three storefront surfaces and who controls each
 
-Standard themes handle this automatically. Ensure you are not stripping the `selling_plan` block from `product-form.liquid`.
+### Product page — controlled by the theme
 
-#### Headless / custom JS
+The product page is part of the theme. Its design is entirely yours to change. The one thing that must not be removed is the **selling plan / purchase option selector** — the UI element that lets the customer choose "Subscribe" before adding to the cart.
+
+Standard Shopify themes (Dawn, Refresh, Sense, etc.) include this automatically under the add-to-cart button. If you are building a headless or fully custom storefront, you must render the selector yourself and pass `selling_plan` in the add-to-cart request:
 
 ```js
-// Add to cart with selling plan
+// Headless add to cart — selling_plan is required
 await fetch('/cart/add.js', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    id: variantId,          // Shopify variant ID (integer)
+    id: variantId,          // numeric variant ID
     quantity: 1,
-    selling_plan: sellingPlanId  // selling plan ID (integer) — required
+    selling_plan: sellingPlanId  // numeric selling plan ID — must be included
   })
 });
 ```
 
-The `sellingPlanId` comes from the product's `selling_plan_groups` data. Expose it from Liquid or query it via the Storefront API:
+Without `selling_plan` in the payload, Shopify treats the item as a one-time purchase. The checkout will still succeed, but no subscription contract is created and the customer will never be billed again.
 
-```graphql
-query ProductSellingPlans($handle: String!) {
-  product(handle: $handle) {
-    sellingPlanGroups(first: 1) {
-      nodes {
-        sellingPlans(first: 1) {
-          nodes {
-            id
-            name
-            priceAdjustments {
-              orderCount
-              adjustmentValue {
-                ... on SellingPlanPercentagePriceAdjustment { adjustmentPercentage }
-                ... on SellingPlanFixedAmountPriceAdjustment { adjustmentAmount { amount } }
-                ... on SellingPlanFixedPriceAdjustment { price { amount currencyCode } }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
+**Also important:** Each variant must have a product image set in Shopify admin. The customer portal uses the variant's image as the device thumbnail in the Subscription tab. If a variant has no image, the portal shows the title only.
 
-### Product image
+### Checkout — controlled by Shopify
 
-The product's **variant image** is displayed in the customer's Subscription tab to identify the device. Make sure each product variant has an image assigned — this is what the portal uses for the device thumbnail.
+The checkout page is fully managed by Shopify. It cannot be modified with custom code — Shopify blocks this for PCI compliance reasons.
+
+Visual branding (logo, colours, font, button style) is configurable in **Online Store → Customize → Checkout** in the Shopify admin. That is the extent of what can be changed here.
+
+**Shopify Payments must remain the active payment processor.** Native subscription contracts and payment method vaulting only work with Shopify Payments. A third-party gateway would break the recurring billing system entirely.
+
+### Customer account Subscription tab — controlled by the app extension
+
+The Subscription tab in the customer account is rendered by the `subscription-portal` Customer Accounts UI Extension. It is not part of the theme — it lives on Shopify's CDN and is deployed separately via `shopify app deploy`.
+
+The visual components inside the tab (`s-section`, `s-text`, `s-button`, etc.) follow Shopify's Customer Accounts design system. Their colours and spacing respond to the Customer Accounts theme settings in Shopify admin — not to the storefront theme. You can update the Customer Accounts colour palette in **Online Store → Customize → Customer accounts**, and the extension will pick up those changes automatically.
+
+The content and layout inside the tab (what sections appear, what text is shown, what actions are available) requires editing the extension source code at `extensions/subscription-portal/src/index.jsx` and redeploying.
 
 ---
 
-## 2. Checkout
+## Theme recommendation
 
-### What happens at checkout
+### What exists today
 
-Shopify's native checkout handles everything. No checkout UI extension has been added.
+The live store runs a **custom-built Shopify theme** named "Final Figma Homepage - FT - 3-11-2025" — built to match the Waqtly Figma design system. It is not a standard Shopify theme; it was coded from scratch to match brand specifications.
 
-When a customer checks out with a subscription item:
+### For a redesign: build within Shopify's theme system
 
-1. Shopify charges the **entry payment** immediately (one-time).
-2. Shopify captures the customer's **payment method** and vaults it.
-3. Shopify creates a **subscription contract** linked to the customer, the selling plan, and the vaulted payment method.
-4. The Waqtly Subscriptions app receives a `subscription_contracts/create` webhook.
+**Recommendation: redesign within a Shopify Liquid theme** (whether adapting the existing custom theme or starting from a new base like Dawn). Avoid going headless unless there is a strong product reason.
 
-The recurring monthly charge (from month 7) is triggered separately by the app's billing scheduler — it calls `subscriptionBillingAttemptCreate` at the right time. The checkout itself does not configure when future charges happen — that is determined by the selling plan's `billingPolicy`.
+Here is why:
 
-### Theme constraints at checkout
+**The subscription system is almost entirely theme-agnostic.** The selling plan selector, the checkout, and the customer portal extension are all handled by Shopify natively. The theme only needs to:
+1. Not strip the purchase option selector from the product form
+2. Keep variant images populated so the portal thumbnail works
 
-Shopify's checkout is fully hosted and styled by Shopify. Its visual appearance is controlled in **Online Store → Themes → Customize → Checkout** (colours, logo, fonts) — not by custom code. This is by design for PCI compliance.
+A theme swap or redesign does not affect contracts, webhooks, billing, or the Subscription tab at all.
 
-Do not attempt to inject custom JS or HTML into the checkout page. Shopify blocks this.
+**Headless introduces meaningful complexity for no subscription-related gain.** A headless storefront (React/Next.js + Storefront API) would require you to:
+- Manually implement the selling plan selector UI
+- Manually pass `sellingPlanId` in every add-to-cart call
+- Handle subscription-specific cart state (selling plans cannot be added via the standard Cart API without the field)
+- Separately solve for the Customer Accounts extension, which only renders in Shopify's native customer accounts — not in a custom-built account page
 
-### Shopify Payments
+If the goal is a redesign, the most efficient path is to either:
+- **Edit the existing custom theme** — keeps all existing subscription wiring intact, only updates visuals
+- **Start from Dawn** — Shopify's open-source reference theme, fully subscription-aware out of the box, then apply Waqtly brand styling on top
 
-Waqtly uses **Shopify Payments** as the payment processor. This is required for subscription contracts and native payment method vaulting. Third-party payment gateways do not support subscription contracts.
-
----
-
-## 3. Customer Accounts — Subscription Tab
-
-### What this is
-
-The `subscription-portal` extension is a **Customer Accounts UI Extension** built by the Waqtly Subscriptions app. It adds a dedicated **"Subscription"** page to the customer's account at:
-
-```
-waqtly.com/account
-```
-
-Shopify renders it as a navigation tab alongside Orders, Profile, etc. The extension target is `customer-account.page.render`.
-
-### What the customer sees
-
-The portal renders one card per active subscription contract. Cancelled and expired contracts are hidden. Each card shows three sections:
-
-**Devices**
-- Status indicator (Active / Paused / Payment failed) with colour-coded icon
-- Each subscribed device with its product image thumbnail, title, and plan name
-
-**Billing timeline**
-- Entry payment date and amount (marked Paid in green)
-- Free period label if applicable (months 1–6)
-- Upcoming recurring charge with amount and next billing date
-
-**Payment method**
-- Card brand and last 4 digits
-- Expiry date
-- "Update" button — sends the customer a Shopify-managed secure email link to update their card without entering the app
-
-**Actions (below the card)**
-- Active subscriptions: "Pause subscription" (requires confirmation)
-- Paused subscriptions: "Resume subscription"
-- Failed payment: "Update payment method" (same secure email flow)
-
-### Design constraints — what you can and cannot change
-
-The Customer Accounts UI extension uses **Shopify's own component library** (`s-section`, `s-stack`, `s-text`, `s-button`, etc.). These components inherit the Shopify Customer Accounts design system — they follow the colours, typography, and spacing the merchant sets in **Online Store → Themes → Customize → Customer accounts**.
-
-| What you control | How |
-|---|---|
-| Brand colours in the account UI | Customer accounts theme settings in Shopify admin |
-| Typography in the account UI | Customer accounts theme settings |
-| Which navigation items appear | Customer accounts navigation settings |
-| The content and layout inside the Subscription tab | The extension source code (`extensions/subscription-portal/src/index.jsx`) |
-
-**You cannot** apply arbitrary CSS to the extension's content — the `s-*` components are sandboxed and styled by Shopify's system. Layout changes (reordering sections, adding new information) require editing the extension and redeploying with `shopify app deploy`.
-
-### Component tone values supported in this surface
-
-Some `s-badge` tone values (`success`, `warning`, `info`) do not render with colour in the `customer-account.page.render` surface — they fall back to dark/neutral. The portal currently uses `s-icon` + `s-text` for coloured status indicators instead, which do respect `tone="success"`, `tone="warning"`, and `tone="critical"`.
-
-Keep this in mind if extending the portal with new status indicators.
+Either way, the Subscriptions app, the extension, and the checkout branding remain unchanged and continue to work.
 
 ---
 
-## 4. Data Flow Summary
+## Pre-launch checklist for any new theme
 
-```
-Customer adds device to cart
-  → with sellingPlanId (required)
-    ↓
-Shopify checkout
-  → charges entry payment
-  → vaults payment method
-  → creates SubscriptionContract
-    ↓
-Waqtly Subscriptions app (Railway backend)
-  ← subscription_contracts/create webhook
-  → activates device in CRM (pending)
-    ↓
-Month 7 billing scheduler
-  → subscriptionBillingAttemptCreate
-  → charges monthly fee via vaulted payment method
-    ↓
-Customer account portal (extension)
-  → reads contracts via /api/portal/contracts
-  → allows pause / resume / payment update
-```
+- [ ] Selling plan selector visible on `/products/waqtlyplus` and `/products/waqtlynano`
+- [ ] Test add-to-cart in browser devtools: POST `/cart/add.js` payload includes `selling_plan` field
+- [ ] All product variants have images assigned in Shopify admin (portal thumbnails)
+- [ ] Customer accounts Subscription tab appears in account navigation (`waqtly.com/account`)
+- [ ] Checkout branding (logo, colours) updated in Online Store → Customize → Checkout
+- [ ] Shopify Payments remains active as the payment processor
+- [ ] No custom JS injected into checkout pages
 
 ---
 
-## 5. Extension Configuration Reference
+## Quick reference: selling plan IDs
 
-**File:** `extensions/subscription-portal/shopify.extension.toml`
+These IDs are needed if rendering the purchase option selector manually in a headless storefront.
 
-```toml
-api_version = "2026-07"
+| Product | Selling Plan ID (GID) | Numeric ID |
+|---|---|---|
+| Waqtly Plus • 13.5 inch | `gid://shopify/SellingPlan/691771572547` | `691771572547` |
+| Waqtly Nano • 10.1 inch | `gid://shopify/SellingPlan/691771605315` | `691771605315` |
 
-[[extensions]]
-name = "subscription-portal"
-handle = "subscription-portal"
-type = "ui_extension"
-
-[[extensions.targeting]]
-module = "./src/index.jsx"
-target = "customer-account.page.render"
-
-[extensions.capabilities]
-api_access = true
-network_access = true  # required for fetching from Railway backend
-```
-
-**Backend URL (hardcoded in extension source):**
-
-```
-extensions/subscription-portal/src/index.jsx — line 5
-const APP_URL = 'https://waqtly-subscriptions-production.up.railway.app';
-```
-
-If the backend moves to a new host, update this line and run `shopify app deploy`.
-
----
-
-## 6. Storefront Checklist for a New Theme
-
-Before going live with a redesigned storefront, verify the following:
-
-- [ ] **Selling plan selector is visible** on every product page that has subscription products — buyer must be able to select the subscription option
-- [ ] **Add-to-cart includes `selling_plan` field** — check this in the browser network tab (POST `/cart/add.js`) for a test add from the new product page
-- [ ] **Variant images are set** in Shopify admin for each device product — used as thumbnails in the customer portal
-- [ ] **Customer accounts navigation** shows the Subscription tab — verify in Shopify admin under Online Store → Customize → Customer accounts → Navigation
-- [ ] **Checkout branding** (logo, colours) is updated in Online Store → Customize → Checkout if the brand has changed
-- [ ] **No custom JS injected into checkout** — any checkout-page scripting will be blocked by Shopify
-
----
-
-## 7. App Scopes in Use
-
-The Waqtly Subscriptions app holds the following access scopes relevant to storefront behaviour:
-
-| Scope | Purpose |
-|---|---|
-| `read_products`, `write_products` | Read product/variant data and selling plan groups |
-| `read_purchase_options`, `write_purchase_options` | Create and manage selling plans |
-| `read_own_subscription_contracts`, `write_own_subscription_contracts` | Read and mutate subscription contracts |
-| `read_customer_payment_methods`, `write_payment_mandate` | Read vaulted cards, send update emails |
-| `read_customers`, `write_customers` | Look up customers by ID for portal data |
-| `customer_read_own_subscription_contracts`, `customer_write_own_subscription_contracts` | Customer-scoped access used by the extension session token |
-
-These are declared in `shopify.app.toml` and approved via the Partners Dashboard. No theme-side scope configuration is needed.
+For standard Liquid themes these IDs are exposed automatically via `product.selling_plan_groups` and do not need to be hardcoded.
