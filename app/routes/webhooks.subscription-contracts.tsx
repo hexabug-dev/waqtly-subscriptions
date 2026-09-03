@@ -78,6 +78,60 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         break;
       }
 
+      case "orders/cancelled": {
+        const orderGid = payload.admin_graphql_api_id as string | undefined;
+        const fulfillmentStatus = payload.fulfillment_status as string | null | undefined;
+
+        // Only auto-cancel if tablet has not shipped — fulfilled/partial orders stay manual
+        if (!orderGid || (fulfillmentStatus && fulfillmentStatus !== "unfulfilled")) {
+          console.log(`[webhook] orders/cancelled skipped — fulfillment_status: ${fulfillmentStatus ?? "null"}`);
+          break;
+        }
+
+        const orderData = await adminGQL(
+          `query($id: ID!) {
+            order(id: $id) {
+              subscriptionContracts(first: 5) {
+                nodes { id status }
+              }
+            }
+          }`,
+          { id: orderGid }
+        );
+
+        const contracts: Array<{ id: string; status: string }> =
+          orderData?.data?.order?.subscriptionContracts?.nodes ?? [];
+
+        const cancellable = contracts.filter(
+          (c) => c.status === "ACTIVE" || c.status === "PAUSED"
+        );
+
+        for (const contract of cancellable) {
+          const result = await adminGQL(
+            `mutation($id: ID!) {
+              subscriptionContractCancel(subscriptionContractId: $id) {
+                contract { id status }
+                userErrors { field message }
+              }
+            }`,
+            { id: contract.id }
+          );
+          const errors: Array<{ message: string }> =
+            result?.data?.subscriptionContractCancel?.userErrors ?? [];
+          if (errors.length) {
+            throw new Error(
+              `Cancel failed for ${contract.id}: ${errors.map((e) => e.message).join(", ")}`
+            );
+          }
+          console.log(`[webhook] contract ${contract.id} cancelled — order ${orderGid} cancelled unfulfilled`);
+        }
+
+        if (cancellable.length === 0) {
+          console.log(`[webhook] orders/cancelled — no active/paused contracts found for ${orderGid}`);
+        }
+        break;
+      }
+
       default:
         // Log unhandled topics — handlers for contracts/update, billing success/challenged, disputes TBD
         console.log(`[webhook] ${topic} — no handler yet, payload logged`);

@@ -31,6 +31,10 @@ uri = "/webhooks/subscription-contracts"
 topics = ["subscription_billing_attempts/challenged"]
 uri = "/webhooks/subscription-contracts"
 
+[[webhooks.subscriptions]]
+topics = ["orders/cancelled"]
+uri = "/webhooks/subscription-contracts"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_checkout_and_accounts_configurations,write_checkout_and_accounts_configurations,read_customers,write_customers,read_fulfillments,read_orders,write_orders,write_payment_mandate,read_payment_mandate,read_products,write_products,read_purchase_options,write_purchase_options,read_shopify_payments_provider_accounts_sensitive,write_own_subscription_contracts,read_own_subscription_contracts,read_customer_payment_methods,customer_read_customers,customer_read_draft_orders,customer_read_orders,customer_write_own_subscription_contracts,customer_read_own_subscription_contracts"
