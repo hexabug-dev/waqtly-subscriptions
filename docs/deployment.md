@@ -89,6 +89,7 @@ Handler: `app/routes/webhooks.subscription-contracts.tsx` — verifies HMAC, rou
 |---|---|
 | `subscription_billing_attempts/failure` | Sends `customerPaymentMethodSendUpdateEmail` |
 | `customer_payment_methods/revoke` | Sends `customerPaymentMethodSendUpdateEmail` |
+| `orders/cancelled` | Cancels linked contract if order is unfulfilled (tablet not shipped) |
 | All others | Logs payload — handler pending |
 
 | Topic | Shopify ID |
@@ -102,6 +103,7 @@ Handler: `app/routes/webhooks.subscription-contracts.tsx` — verifies HMAC, rou
 | CUSTOMER_PAYMENT_METHODS_UPDATE | gid://shopify/WebhookSubscription/1982861803843 |
 | CUSTOMER_PAYMENT_METHODS_REVOKE | gid://shopify/WebhookSubscription/1982861836611 |
 | DISPUTES_CREATE | gid://shopify/WebhookSubscription/1982862033219 |
+| ORDERS_CANCELLED | registered via shopify.app.toml — ID assigned on deploy |
 
 ## Pending Work
 
