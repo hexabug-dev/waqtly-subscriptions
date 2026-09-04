@@ -13,7 +13,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         nodes {
           id
           status
-          customer { defaultEmailAddress { emailAddress } }
+          originOrder { name }
+          customer {
+            displayName
+            defaultEmailAddress { emailAddress }
+          }
           lines(first: 10) {
             nodes {
               title
@@ -39,7 +43,11 @@ type ContractLine = {
 type Contract = {
   id: string;
   status: string;
-  customer: { defaultEmailAddress: { emailAddress: string } | null } | null;
+  originOrder: { name: string } | null;
+  customer: {
+    displayName: string | null;
+    defaultEmailAddress: { emailAddress: string } | null;
+  } | null;
   lines: { nodes: ContractLine[] };
   billingPolicy: { interval: string; intervalCount: number } | null;
   nextBillingDate: string | null;
@@ -109,7 +117,7 @@ export default function ContractsPage() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
-                    {["Customer", "Product(s)", "Plan", "Price", "Billing", "Next date", "Status"].map((h) => (
+                    {["Order", "Customer", "Product(s)", "Plan", "Price", "Billing", "Next date", "Status"].map((h) => (
                       <th key={h} style={thStyle}>{h}</th>
                     ))}
                   </tr>
@@ -123,7 +131,15 @@ export default function ContractsPage() {
                     const email = contract.customer?.defaultEmailAddress?.emailAddress ?? "—";
                     return (
                       <tr key={contract.id} style={{ borderBottom: "1px solid #f1f2f3" }}>
-                        <td style={{ ...tdStyle, fontWeight: 600 }}>{email}</td>
+                        <td style={{ ...tdStyle, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                          {contract.originOrder?.name ?? "—"}
+                        </td>
+                        <td style={{ ...tdStyle }}>
+                          {contract.customer?.displayName && (
+                            <div style={{ fontWeight: 600 }}>{contract.customer.displayName}</div>
+                          )}
+                          <div style={{ fontSize: "12px", color: "#6d7175" }}>{email}</div>
+                        </td>
                         <td style={tdStyle}>
                           {lines.map((l, i) => (
                             <div key={i} style={{ lineHeight: "1.6" }}>{l.title}</div>
