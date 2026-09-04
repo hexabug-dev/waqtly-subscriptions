@@ -88,22 +88,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           break;
         }
 
-        const orderData = await adminGQL(
-          `query($id: ID!) {
-            order(id: $id) {
-              subscriptionContracts(first: 5) {
-                nodes { id status }
+        // order.subscriptionContracts doesn't exist — look up via customer instead
+        const customer = payload.customer as Record<string, unknown> | undefined;
+        const customerNumericId = customer?.id as number | string | undefined;
+        if (!customerNumericId) {
+          console.log(`[webhook] orders/cancelled — no customer on order ${orderGid}, skipping`);
+          break;
+        }
+        const customerGid = `gid://shopify/Customer/${customerNumericId}`;
+
+        const customerData = await adminGQL(
+          `query($customerId: ID!) {
+            customer(id: $customerId) {
+              subscriptionContracts(first: 10) {
+                nodes {
+                  id
+                  status
+                  originOrder { id }
+                }
               }
             }
           }`,
-          { id: orderGid }
+          { customerId: customerGid }
         );
 
-        const contracts: Array<{ id: string; status: string }> =
-          orderData?.data?.order?.subscriptionContracts?.nodes ?? [];
+        const allContracts: Array<{ id: string; status: string; originOrder: { id: string } | null }> =
+          customerData?.data?.customer?.subscriptionContracts?.nodes ?? [];
 
-        const cancellable = contracts.filter(
-          (c) => c.status === "ACTIVE" || c.status === "PAUSED"
+        // Only cancel contracts whose origin order matches this cancelled order
+        const cancellable = allContracts.filter(
+          (c) =>
+            c.originOrder?.id === orderGid &&
+            (c.status === "ACTIVE" || c.status === "PAUSED")
         );
 
         for (const contract of cancellable) {
@@ -127,7 +143,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
 
         if (cancellable.length === 0) {
-          console.log(`[webhook] orders/cancelled — no active/paused contracts found for ${orderGid}`);
+          console.log(`[webhook] orders/cancelled — no active/paused contracts for order ${orderGid}`);
         }
         break;
       }
